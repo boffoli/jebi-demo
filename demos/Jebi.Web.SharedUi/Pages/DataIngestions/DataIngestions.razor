@@ -1,0 +1,148 @@
+@* Pages/DataIngestion/Ingestion.razor *@
+@page "/ingest-json"
+@attribute [Authorize]
+@namespace Jebi.Web.Pages.DataIngestion
+
+@using Jebi.Common.Features.Dtos.Model.Ingestion
+@using Jebi.Web.Pages.DataIngestion.Parts
+@inject IJebiService IngestionService
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+<PageTitle>Ingestion Setups</PageTitle>
+
+<div class="jebi-page-header">
+  <div class="jebi-page-header__content">
+    <div class="jebi-page-header__eyebrow">Execution</div>
+    <h1 class="jebi-page-header__title">Ingestion Setups</h1>
+    <p class="jebi-page-header__subtitle">
+      Manage execution-ready ingestion setups, run data loads against a target provider, and inspect the resulting runs.
+    </p>
+  </div>
+
+  @if (!isLoading)
+  {
+    <div class="jebi-page-header__actions">
+      <button class="btn btn-outline-primary"
+              @onclick="() => showCreator = true"
+              disabled="@(isLoading || showCreator)">
+        + New Setup
+      </button>
+    </div>
+  }
+</div>
+
+@if (isLoading)
+{
+  <p><em>Loading setups...</em></p>
+}
+else
+{
+  <div class="row mb-4">
+    <div class="col-12">
+      <IngestionContextGrid
+        Contexts="contexts"
+        Selected="selectedContext"
+        SelectedChanged="OnContextSelected"
+        InspectRequested="OpenInspectorAsync"
+        DeleteRequested="DeleteSetupAsync" />
+    </div>
+  </div>
+}
+
+@if (showCreator)
+{
+  <CreateIngestionContextModal
+      OnCreated="HandleContextCreated"
+      OnCancel="() => showCreator = false" />
+}
+
+@if (showInspector && selectedContext is not null)
+{
+  <JebiInspectorModal IsOpen="showInspector"
+                      Title="@($"Ingestion inspector - {FormatSetupName(selectedContext)}")"
+                      ShowLeftPane="false"
+                      DialogSizeClass="jebi-inspector-dialog-ingestion"
+                      OnClose="CloseInspectorAsync">
+    <RightContent>
+      <IngestionRunSection Context="selectedContext" />
+    </RightContent>
+  </JebiInspectorModal>
+}
+
+@code {
+  private bool isLoading;
+  private List<DataIngestionSetupDto> contexts = [];
+  private DataIngestionSetupDto? selectedContext;
+  private bool showCreator;
+  private bool showInspector;
+
+  protected override async Task OnInitializedAsync()
+  {
+    isLoading = true;
+    try
+    {
+      await ReloadAllAsync();
+    }
+    catch (Exception ex)
+    {
+      await Notifier.Error(ex, 5_000);
+    }
+    finally
+    {
+      isLoading = false;
+    }
+  }
+
+  private async Task ReloadAllAsync()
+  {
+    contexts = (await IngestionService.ListIngestionSetupsAsync()).ToList();
+
+    if (selectedContext is not null)
+      selectedContext = contexts.FirstOrDefault(c => c.Id == selectedContext.Id);
+  }
+
+  private void OnContextSelected(DataIngestionSetupDto? dto)
+    => selectedContext = dto;
+
+  private Task OpenInspectorAsync(DataIngestionSetupDto context)
+  {
+    selectedContext = context;
+    showInspector = true;
+    return Task.CompletedTask;
+  }
+
+  private Task CloseInspectorAsync()
+  {
+    showInspector = false;
+    return Task.CompletedTask;
+  }
+
+  private async Task DeleteSetupAsync(Guid id)
+  {
+    try
+    {
+      await IngestionService.DeleteIngestionSetupAsync(id);
+      contexts.RemoveAll(c => c.Id == id);
+      if (selectedContext?.Id == id)
+      {
+        selectedContext = null;
+        showInspector = false;
+      }
+    }
+    catch (Exception ex)
+    {
+      await Notifier.Error(ex, 5000);
+    }
+  }
+
+  private async Task HandleContextCreated(Guid newContextId)
+  {
+    showCreator = false;
+    await ReloadAllAsync();
+    selectedContext = contexts.FirstOrDefault(c => c.Id == newContextId);
+    showInspector = selectedContext is not null;
+  }
+
+  private static string FormatSetupName(DataIngestionSetupDto setup)
+    => string.IsNullOrWhiteSpace(setup.Name) ? "(unnamed)" : setup.Name;
+}

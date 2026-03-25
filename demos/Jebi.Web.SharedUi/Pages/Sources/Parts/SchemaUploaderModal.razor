@@ -1,0 +1,115 @@
+@* Pages/Sources/Parts/SchemaUploaderModal.razor *@
+@namespace Jebi.Web.Pages.Sources.Parts
+@using System.IO
+@using Jebi.Web.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Jebi.Common.Features.Dtos.Model.Source
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Data.Sqlite
+
+@inject IJebiService  SourceService
+@inject ErrorNotifier   Notifier
+
+<div class="modal fade show d-block" tabindex="-1"
+     style="background-color:rgba(0,0,0,.5);">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:32rem;">
+        <div class="modal-content">
+
+            <!-- Header -->
+            <div class="modal-header">
+                <h5 class="modal-title">Add New JSON Schema</h5>
+                <button type="button" class="btn-close"
+                        disabled="@saving"
+                        @onclick="() => OnCancel.InvokeAsync()"></button>
+            </div>
+
+            <!-- Body -->
+            <div class="modal-body">
+
+                @if (saving)
+                {
+                    <div class="d-flex align-items-center gap-2 py-2">
+                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                        <span>Saving schema…</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-2">
+                        <label class="form-label mb-1">Description</label>
+                        <input class="form-control form-control-sm"
+                               @bind="newDescription" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label mb-1">JSON File *</label>
+                        <InputFile OnChange="OnFileSelected"
+                                   accept=".json"
+                                   class="form-control form-control-sm" />
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6 d-grid">
+                            <button class="btn btn-primary btn-sm"
+                                    disabled="@(selectedFile is null)"
+                                    @onclick="ImportAsync">
+                                Import
+                            </button>
+                        </div>
+                        <div class="col-6 d-grid">
+                            <button class="btn btn-secondary btn-sm"
+                                    @onclick="() => OnCancel.InvokeAsync()">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                }
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<SchemaDetailDto> OnSchemaAdded { get; set; }
+    [Parameter] public EventCallback                  OnCancel      { get; set; }
+
+    private string        newDescription = string.Empty;
+    private IBrowserFile? selectedFile;
+    private bool          saving;
+
+    private void OnFileSelected(InputFileChangeEventArgs e) => selectedFile = e.File;
+
+    private async Task ImportAsync()
+    {
+        if (selectedFile is null) return;
+        saving = true;
+        StateHasChanged();
+        try
+        {
+            await using var stream = selectedFile.OpenReadStream(10 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var jsonContent = await reader.ReadToEndAsync();
+            var name = Path.GetFileNameWithoutExtension(selectedFile.Name);
+
+            var dto = await SourceService.SeedSourceSchemaRawAsync(
+                name, jsonContent, newDescription, forceSave: false);
+
+            await OnSchemaAdded.InvokeAsync(dto.Schema);
+        }
+        catch (DbUpdateException dbEx) when (IsUniqueViolation(dbEx))
+        {
+            await Notifier.Error(new Exception($"Schema '{newDescription}' already exists."), 5000);
+            saving = false;
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 5000);
+            saving = false;
+        }
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException ex)
+        => ex.InnerException is SqliteException sql
+           && sql.SqliteErrorCode == 19
+           && sql.Message.Contains("JsonSchemas.Name", StringComparison.Ordinal);
+}

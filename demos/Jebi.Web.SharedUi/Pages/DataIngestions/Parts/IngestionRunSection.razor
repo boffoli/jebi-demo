@@ -1,0 +1,383 @@
+@* Pages/DataIngestion/Parts/IngestionRunSection.razor *@
+@namespace Jebi.Web.Pages.DataIngestion.Parts
+@using Microsoft.AspNetCore.Components.Forms
+@using Jebi.Common.Features.Dtos.Model.Binding
+@using Jebi.Common.Features.Dtos.Model.Ingestion
+@using Jebi.Web.Pages.Bindings.Parts
+@inject IJebiService IngestionService
+@inject IJSRuntime JS
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+@if (Context is not null)
+{
+  <div class="card">
+    <div class="card-header" title="@($"Setup Id: {Context.Id}")">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="me-auto">
+          <div class="small text-muted">Selected setup</div>
+          <div class="fw-semibold">
+            @(string.IsNullOrWhiteSpace(Context.Name) ? "(unnamed)" : Context.Name)
+          </div>
+          <div class="small text-muted">
+            Binding: @(!string.IsNullOrWhiteSpace(Context.DataBindingRef?.Name) ? Context.DataBindingRef!.Name : Context.DataBindingRef?.Id.ToString() ?? "")
+            @if (!string.IsNullOrWhiteSpace(Context.EntityProviderInfo.ProviderDisplay))
+            {
+              <span class="mx-2">·</span>
+              <span title="@Context.EntityProviderInfo?.ProviderDisplay">Provider: @Context.EntityProviderInfo?.ProviderDisplay</span>
+            }
+          </div>
+        </div>
+
+        <div class="form-check form-switch">
+          <InputCheckbox @bind-Value="persistRequested" class="form-check-input" id="persistSwitch" />
+          <label class="form-check-label" for="persistSwitch">Persist (off = Dry-run)</label>
+        </div>
+
+        <button class="btn btn-sm btn-outline-warning"
+                title="Reset correlations"
+                disabled="@busy"
+                @onclick="ResetCorrelationsAsync">
+          ♻️
+        </button>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-8">
+          <label class="form-label">JSON file</label>
+          <InputFile OnChange="OnFileSelected"
+                     class="form-control form-control-sm"
+                     accept=".json,application/json"
+                     disabled="@busy" />
+          @if (!string.IsNullOrWhiteSpace(fileName))
+          {
+            <div class="form-text mt-1 text-truncate">
+              File: <code>@fileName</code> — @payloadLength chars
+            </div>
+          }
+        </div>
+
+        <div class="col-md-4">
+          <div class="d-flex align-items-center gap-3">
+            <div class="form-check form-check-inline d-inline-flex align-items-center mb-0 text-nowrap">
+              <InputCheckbox @bind-Value="schemaValidation"
+                             class="form-check-input me-1"
+                             id="validateJsonCheckbox" />
+              <label class="form-check-label mb-0" for="validateJsonCheckbox">
+                Validate schema
+              </label>
+            </div>
+
+            <button class="btn btn-sm btn-outline-primary ms-auto"
+                    title="@(persistRequested ? "Ingest" : "Dry-run")"
+                    disabled="@(!CanIngest)"
+                    @onclick="IngestAsync">
+              @(persistRequested ? "📥" : "🧪")
+            </button>
+
+            <span title="Refresh runs list (does not execute ingestion)">
+              <button class="btn btn-sm btn-outline-secondary"
+                      aria-label="Refresh runs list"
+                      disabled="@busy"
+                      @onclick="RefreshRunsAsync">
+                ⟳
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      @if (bindingValidationBusy)
+      {
+        <div class="alert alert-light mt-3 py-2 mb-0 small">
+          Checking binding validation state...
+        </div>
+      }
+      else if (currentBindingConfiguration is not null)
+      {
+        <div class="mt-3 d-flex flex-wrap align-items-center gap-2">
+          <span class="jebi-binding-state-badge @(currentBindingConfiguration.IsValid ? "jebi-binding-state-badge-ok" : "jebi-binding-state-badge-ko")">
+            @(currentBindingConfiguration.IsValid ? "Valid binding" : "Invalid binding")
+          </span>
+          <span class="small text-muted">
+            Current binding: @currentBindingConfiguration.Name
+          </span>
+        </div>
+
+        @if (!currentBindingConfiguration.IsValid)
+        {
+          <BindingValidationSummary
+            Title="Why this ingestion is blocked"
+            OpenByDefault="true"
+            ConfigurationIssues="currentBindingConfiguration.LocalValidationIssues"
+            EntityGroups="BuildEntityIssueGroups(currentBindingConfiguration)"
+            PropertyGroups="BuildPropertyIssueGroups(currentBindingConfiguration)" />
+        }
+      }
+      else if (!string.IsNullOrWhiteSpace(bindingValidationLoadMessage))
+      {
+        <div class="alert alert-warning mt-3 py-2 mb-0 small">
+          @bindingValidationLoadMessage
+        </div>
+      }
+
+      @if (!string.IsNullOrWhiteSpace(contextInfoMessage))
+      {
+        <div class="alert alert-info mt-3 py-2 mb-0 small">@contextInfoMessage</div>
+      }
+      @if (showPersistentRunError && !string.IsNullOrWhiteSpace(persistentRunErrorMessage))
+      {
+        <div class="alert alert-danger mt-3 py-2 mb-0 small">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <span>@persistentRunErrorMessage</span>
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    title="Dismiss"
+                    @onclick="DismissPersistentRunError">
+              OK
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="card-body p-0">
+      <IngestionRunGrid @ref="runGrid"
+                        ContextId="Context.Id"
+                        ReadOnly="false"
+                        Busy="@busy"
+                        RenderFrameless="true"
+                        OnRunDeleted="OnRunDeleted" />
+    </div>
+  </div>
+}
+
+@code {
+  [Parameter] public DataIngestionSetupDto? Context { get; set; }
+  [Parameter] public EventCallback<Guid> OnRunDeleted { get; set; }
+
+  private IngestionRunGrid? runGrid;
+
+  private bool   busy;
+  private bool   bindingValidationBusy;
+  private string? jsonPayload;
+  private string? fileName;
+  private int    payloadLength;
+  private bool   schemaValidation  = true;
+  private bool   persistRequested  = true;
+
+  private string? contextInfoMessage;
+  private DataIngestionRunResultDto? lastResult;
+  private bool showPersistentRunError;
+  private string? persistentRunErrorMessage;
+  private Guid? lastLoadedContextId;
+  private BindingDetailDto? currentBindingConfiguration;
+  private string? bindingValidationLoadMessage;
+
+  private bool CanIngest
+    => Context is not null
+       && !string.IsNullOrWhiteSpace(jsonPayload)
+       && !busy
+       && !bindingValidationBusy
+       && currentBindingConfiguration is { IsValid: true };
+
+  protected override async Task OnParametersSetAsync()
+  {
+    if (Context?.Id == lastLoadedContextId)
+      return;
+
+    lastLoadedContextId = Context?.Id;
+    await RefreshBindingValidationStateAsync();
+  }
+
+  private async Task OnFileSelected(InputFileChangeEventArgs e)
+  {
+    try
+    {
+      jsonPayload   = null;
+      fileName      = null;
+      payloadLength = 0;
+
+      var file = e.File;
+      if (file is null) return;
+
+      fileName = file.Name;
+
+      using var stream = file.OpenReadStream(long.MaxValue);
+      using var reader = new StreamReader(stream);
+      jsonPayload   = await reader.ReadToEndAsync();
+      payloadLength = jsonPayload?.Length ?? 0;
+    }
+    catch (Exception ex)
+    {
+      persistentRunErrorMessage = Jebi.Web.Services.ErrorNotifier.NormalizeMessage(ex.Message);
+      showPersistentRunError = true;
+      contextInfoMessage = null;
+      await Notifier.Error(ex, 5000);
+    }
+  }
+
+  private async Task IngestAsync()
+  {
+    if (!CanIngest || Context is null) return;
+
+    busy = true;
+    try
+    {
+      var options = new DataIngestionOptionsDto
+      {
+        ValidateSchema   = schemaValidation,
+        PersistRequested = persistRequested
+      };
+
+      lastResult = await IngestionService.RunIngestionAsync(
+        Context.Id,
+        jsonPayload!,
+        options,
+        CancellationToken.None);
+
+      var displayName = string.IsNullOrWhiteSpace(Context.Name) ? "(unnamed)" : Context.Name;
+
+      if (!(lastResult?.Success ?? false))
+      {
+        persistentRunErrorMessage = BuildRunFailureMessage(lastResult);
+        showPersistentRunError = true;
+      }
+      else
+      {
+        showPersistentRunError = false;
+        persistentRunErrorMessage = null;
+        contextInfoMessage = persistRequested
+          ? $"Persist completed on setup '{displayName}'."
+          : $"Dry-run completed on setup '{displayName}'.";
+      }
+
+      // ricarica lo storico
+      await RefreshRunsAsync();
+    }
+    catch (Exception ex)
+    {
+      await Notifier.Error(ex, 5000);
+    }
+    finally { busy = false; }
+  }
+
+  private void DismissPersistentRunError()
+  {
+    showPersistentRunError = false;
+  }
+
+  private static string BuildRunFailureMessage(DataIngestionRunResultDto? result)
+  {
+    if (result is null)
+      return "Run failed.";
+
+    var normalizedErrors = (result.Errors ?? [])
+      .Where(e => !string.IsNullOrWhiteSpace(e))
+      .Select(Jebi.Web.Services.ErrorNotifier.NormalizeMessage)
+      .Distinct(StringComparer.OrdinalIgnoreCase)
+      .ToList();
+
+    var baseMessage = normalizedErrors.Count > 0
+      ? string.Join(" | ", normalizedErrors.Take(2))
+      : "Run failed.";
+
+    var step = TryGetRelevantPersistStep(result);
+    if (string.IsNullOrWhiteSpace(step))
+      return baseMessage;
+
+    // Evita ridondanza se il passo è già nel messaggio principale.
+    return baseMessage.Contains(step, StringComparison.OrdinalIgnoreCase)
+      ? baseMessage
+      : $"{baseMessage} (Step: {step})";
+  }
+
+  private static string? TryGetRelevantPersistStep(DataIngestionRunResultDto result)
+  {
+    if (result.Operations is null || result.Operations.Count == 0)
+      return null;
+
+    var layerStep = result.Operations
+      .LastOrDefault(o => !string.IsNullOrWhiteSpace(o) && o.Contains("Persist: layer", StringComparison.OrdinalIgnoreCase));
+    if (!string.IsNullOrWhiteSpace(layerStep))
+      return layerStep;
+
+    return result.Operations
+      .LastOrDefault(o => !string.IsNullOrWhiteSpace(o) && o.Contains("Persist:", StringComparison.OrdinalIgnoreCase));
+  }
+
+  private async Task RefreshRunsAsync()
+  {
+    await RefreshBindingValidationStateAsync();
+    if (runGrid is not null)
+      await runGrid.LoadRunsAsync();
+  }
+
+  private async Task RefreshBindingValidationStateAsync()
+  {
+    currentBindingConfiguration = null;
+    bindingValidationLoadMessage = null;
+
+    if (Context?.DataBindingRef?.Id is not Guid bindingId || bindingId == Guid.Empty)
+      return;
+
+    bindingValidationBusy = true;
+    try
+    {
+      currentBindingConfiguration = await IngestionService.GetBindingConfigurationDeepAsync(bindingId);
+    }
+    catch (Exception ex)
+    {
+      currentBindingConfiguration = null;
+      bindingValidationLoadMessage = $"Binding validation state unavailable. {Jebi.Web.Services.ErrorNotifier.NormalizeMessage(ex.Message)}";
+    }
+    finally
+    {
+      bindingValidationBusy = false;
+    }
+  }
+
+  private async Task ResetCorrelationsAsync()
+  {
+    if (Context is null) return;
+    if (!await JS.InvokeAsync<bool>("confirm", "Confirm resetting key-correlations for this setup?"))
+      return;
+
+    busy = true;
+    try
+    {
+      await IngestionService.ResetIngestionCorrelationsAsync(Context.Id);
+      contextInfoMessage = $"Key-correlations cleared for setup '{(string.IsNullOrWhiteSpace(Context.Name) ? "(unnamed)" : Context.Name)}'.";
+      await RefreshRunsAsync();
+    }
+    catch (Exception ex)
+    {
+      await Notifier.Error(ex, 5000);
+    }
+    finally { busy = false; }
+  }
+
+  private static IReadOnlyCollection<BindingValidationGroup> BuildEntityIssueGroups(BindingDetailDto? binding)
+      => binding?.EntityRules
+          .Where(rule => rule.LocalValidationIssues.Count > 0)
+          .Select((rule, index) => new BindingValidationGroup
+          {
+              Label = $"Entity rule {index + 1}",
+              Issues = rule.LocalValidationIssues
+          })
+          .ToList()
+         ?? [];
+
+  private static IReadOnlyCollection<BindingValidationGroup> BuildPropertyIssueGroups(BindingDetailDto? binding)
+      => binding?.EntityRules
+          .SelectMany(rule => rule.PropertyRules)
+          .Where(rule => rule.LocalValidationIssues.Count > 0)
+          .Select((rule, index) => new BindingValidationGroup
+          {
+              Label = $"Property rule {index + 1}",
+              Issues = rule.LocalValidationIssues
+          })
+          .ToList()
+         ?? [];
+}

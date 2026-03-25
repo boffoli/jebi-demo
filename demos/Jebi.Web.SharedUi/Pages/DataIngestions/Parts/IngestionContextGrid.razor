@@ -1,0 +1,116 @@
+@* Pages/DataIngestion/Parts/IngestionSetupGrid.razor *@
+@namespace Jebi.Web.Pages.DataIngestion.Parts
+@using System.Linq
+@using Microsoft.AspNetCore.Components
+@using Jebi.Common.Features.Dtos.Model.Ingestion
+
+<div class="card jebi-grid-card mb-3">
+  <div class="card-body p-0">
+    <table class="table table-hover table-sm align-middle mb-0 jebi-grid-table">
+      <colgroup>
+        <col style="width:18rem" />
+        <col />
+        <col style="width:14rem" />
+        <col style="width:11rem" />
+        <col style="width:11rem" />
+        <col style="width:10rem"  />
+      </colgroup>
+
+      <thead class="table-light">
+        <tr>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("setup"))">Setup@(SI("setup"))</th>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("binding"))">Binding Config.@(SI("binding"))</th>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("provider"))">Target Provider@(SI("provider"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("created"))">Created@(SI("created"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("updated"))">Updated@(SI("updated"))</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        @if (Contexts is null)
+        {
+          <tr><td colspan="6" class="text-center"><em>Loading…</em></td></tr>
+        }
+        else if (!Contexts.Any())
+        {
+          <tr><td colspan="6" class="text-center text-muted">No setups</td></tr>
+        }
+        else
+        {
+          @foreach (var c in Sorted())
+          {
+            var isSel       = Selected?.Id == c.Id;
+            var displayName = string.IsNullOrWhiteSpace(c.Name) ? "(unnamed)" : c.Name;
+            var bindingName = !string.IsNullOrWhiteSpace(c.DataBindingRef?.Name)
+                              ? c.DataBindingRef!.Name
+                              : (c.DataBindingRef?.Id.ToString() ?? string.Empty);
+            var providerDisplay = c.EntityProviderInfo?.ProviderDisplay;
+
+            <tr class="@(isSel ? "table-primary" : null)"
+                style="cursor:pointer"
+                title="@($"Setup Id: {c.Id}")"
+                @onclick="() => OnSelect(c)">
+              <td class="text-truncate" style="max-width:18rem">@displayName</td>
+              <td class="text-truncate">@bindingName</td>
+              <td class="text-truncate" title="@providerDisplay">
+                @if (!string.IsNullOrWhiteSpace(providerDisplay)) { @providerDisplay }
+                else { <span class="text-muted">—</span> }
+              </td>
+              <td class="text-center text-nowrap">@c.CreatedAtUtc:g</td>
+              <td class="text-center text-nowrap">@c.UpdatedAtUtc:g</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-primary me-1"
+                        title="Inspect setup"
+                        @onclick:stopPropagation="true"
+                        @onclick="() => InspectRequested.InvokeAsync(c)"
+                        disabled="@Busy">
+                  🔍
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        title="Delete setup"
+                        @onclick:stopPropagation="true"
+                        @onclick="() => DeleteRequested.InvokeAsync(c.Id)"
+                        disabled="@Busy">
+                  🗑️
+                </button>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+@code{
+  /* ───────── parameters ───────── */
+  [Parameter] public IReadOnlyList<DataIngestionSetupDto>? Contexts { get; set; }
+  [Parameter] public DataIngestionSetupDto? Selected { get; set; }
+  [Parameter] public EventCallback<DataIngestionSetupDto?> SelectedChanged { get; set; }
+  [Parameter] public EventCallback<DataIngestionSetupDto> InspectRequested { get; set; }
+  [Parameter] public EventCallback<Guid> DeleteRequested { get; set; }
+  [Parameter] public bool Busy { get; set; }
+
+  /* ───────── sort state ───────── */
+  private string _sortCol = "updated";
+  private bool   _sortAsc = false;
+  void   SortBy(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } }
+  string SI(string col)     => _sortCol == col ? (_sortAsc ? " ▲" : " ▼") : "";
+
+  IEnumerable<DataIngestionSetupDto> Sorted() => _sortCol switch {
+      "binding"  => _sortAsc
+          ? Contexts!.OrderBy(c => !string.IsNullOrWhiteSpace(c.DataBindingRef?.Name) ? c.DataBindingRef!.Name : (c.DataBindingRef?.Id.ToString() ?? ""), StringComparer.OrdinalIgnoreCase)
+          : Contexts!.OrderByDescending(c => !string.IsNullOrWhiteSpace(c.DataBindingRef?.Name) ? c.DataBindingRef!.Name : (c.DataBindingRef?.Id.ToString() ?? ""), StringComparer.OrdinalIgnoreCase),
+      "provider" => _sortAsc
+          ? Contexts!.OrderBy(c => c.EntityProviderInfo?.ProviderDisplay ?? "", StringComparer.OrdinalIgnoreCase)
+          : Contexts!.OrderByDescending(c => c.EntityProviderInfo?.ProviderDisplay ?? "", StringComparer.OrdinalIgnoreCase),
+      "created"  => _sortAsc ? Contexts!.OrderBy(c => c.CreatedAtUtc) : Contexts!.OrderByDescending(c => c.CreatedAtUtc),
+      "updated"  => _sortAsc ? Contexts!.OrderBy(c => c.UpdatedAtUtc) : Contexts!.OrderByDescending(c => c.UpdatedAtUtc),
+      _          => _sortAsc
+          ? Contexts!.OrderBy(c => string.IsNullOrWhiteSpace(c.Name) ? "(unnamed)" : c.Name, StringComparer.OrdinalIgnoreCase)
+          : Contexts!.OrderByDescending(c => string.IsNullOrWhiteSpace(c.Name) ? "(unnamed)" : c.Name, StringComparer.OrdinalIgnoreCase),
+  };
+
+  private Task OnSelect(DataIngestionSetupDto c) => SelectedChanged.InvokeAsync(c);
+}

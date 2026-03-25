@@ -1,0 +1,65 @@
+@namespace Jebi.Web.Shared
+
+<div class="jebi-inspector-header-actions">
+    @if (PrefixActions is not null)
+    {
+        @PrefixActions
+    }
+
+    @if (ShowSyncButton)
+    {
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary"
+                title="Run runtime model sync check"
+                disabled="@IsSyncRefreshing"
+                @onclick="RequestSyncAsync">
+            @if (IsSyncRefreshing)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span>Checking…</span>
+            }
+            else
+            {
+                <span>Check sync</span>
+            }
+        </button>
+    }
+
+    @if (ShowCompleteness)
+    {
+        <span class="@JebiCompletenessDisplay.GetBadgeClass(Completeness)">
+            @JebiCompletenessDisplay.GetBadgeLabel(Completeness)
+        </span>
+    }
+
+    @if (ShowRuntimeSyncBadge)
+    {
+        <span class="@GetRuntimeSyncBadgeClass(RuntimeModelInSync)">
+            @(RuntimeModelInSync ? "OnSync" : "OutOfSync")
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public object? Completeness { get; set; }
+    [Parameter] public bool ShowCompleteness { get; set; } = true;
+    [Parameter] public RenderFragment? PrefixActions { get; set; }
+    [Parameter] public bool ShowSyncButton { get; set; }
+    [Parameter] public bool IsSyncRefreshing { get; set; }
+    [Parameter] public EventCallback SyncRequested { get; set; }
+    [Parameter] public bool ShowRuntimeSyncBadge { get; set; }
+    [Parameter] public bool RuntimeModelInSync { get; set; }
+
+    private static string GetRuntimeSyncBadgeClass(bool isInSync) =>
+        isInSync
+            ? "jebi-binding-state-badge jebi-binding-state-badge-ok"
+            : "jebi-binding-state-badge jebi-binding-state-badge-ko";
+
+    private Task RequestSyncAsync()
+    {
+        if (!SyncRequested.HasDelegate)
+            return Task.CompletedTask;
+
+        return SyncRequested.InvokeAsync();
+    }
+}

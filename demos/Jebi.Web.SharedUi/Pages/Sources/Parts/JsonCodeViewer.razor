@@ -1,0 +1,215 @@
+@namespace Jebi.Web.Pages.Sources.Parts
+@using System.Net
+@using System.Text
+@using System.Text.Encodings.Web
+@using System.Text.Json
+
+<div class="jebi-json-viewer">
+    <div class="jebi-json-viewer__toolbar">
+        <span class="jebi-json-viewer__badge">JSON IDE</span>
+        <span class="jebi-json-viewer__meta">@_lines.Count lines</span>
+    </div>
+
+    <div class="jebi-json-viewer__surface font-monospace">
+        @for (var index = 0; index < _lines.Count; index++)
+        {
+            <div class="jebi-json-viewer__line">
+                <div class="jebi-json-viewer__gutter">@(index + 1)</div>
+                <div class="jebi-json-viewer__code">@((MarkupString)RenderLine(_lines[index]))</div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Json { get; set; }
+
+    private IReadOnlyList<string> _lines = ["{}"];
+
+    protected override void OnParametersSet()
+    {
+        var formatted = FormatJson(Json);
+        _lines = formatted.Replace("\r\n", "\n").Split('\n');
+    }
+
+    private static string FormatJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "{}";
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        }
+        catch
+        {
+            return json;
+        }
+    }
+
+    private static string RenderLine(string line)
+    {
+        var builder = new StringBuilder(line.Length * 2);
+        var index = 0;
+
+        while (index < line.Length)
+        {
+            var c = line[index];
+
+            if (c == '"')
+            {
+                var tokenEnd = FindStringEnd(line, index);
+                var token = line.Substring(index, tokenEnd - index);
+                var probe = tokenEnd;
+                while (probe < line.Length && char.IsWhiteSpace(line[probe]))
+                    probe++;
+
+                var tokenClass = probe < line.Length && line[probe] == ':'
+                    ? "jebi-json-token-key"
+                    : "jebi-json-token-string";
+
+                AppendToken(builder, tokenClass, token);
+                index = tokenEnd;
+                continue;
+            }
+
+            if (c == '-' || char.IsDigit(c))
+            {
+                var tokenEnd = FindNumberEnd(line, index);
+                if (tokenEnd > index)
+                {
+                    AppendToken(builder, "jebi-json-token-number", line[index..tokenEnd]);
+                    index = tokenEnd;
+                    continue;
+                }
+            }
+
+            if (StartsWithKeyword(line, index, "true"))
+            {
+                AppendToken(builder, "jebi-json-token-boolean", "true");
+                index += 4;
+                continue;
+            }
+
+            if (StartsWithKeyword(line, index, "false"))
+            {
+                AppendToken(builder, "jebi-json-token-boolean", "false");
+                index += 5;
+                continue;
+            }
+
+            if (StartsWithKeyword(line, index, "null"))
+            {
+                AppendToken(builder, "jebi-json-token-null", "null");
+                index += 4;
+                continue;
+            }
+
+            if ("{}[]:,".Contains(c))
+            {
+                AppendToken(builder, "jebi-json-token-punctuation", c.ToString());
+                index++;
+                continue;
+            }
+
+            builder.Append(WebUtility.HtmlEncode(c.ToString()));
+            index++;
+        }
+
+        return builder.ToString();
+    }
+
+    private static int FindStringEnd(string line, int start)
+    {
+        var escaped = false;
+        var index = start + 1;
+
+        while (index < line.Length)
+        {
+            var c = line[index];
+            if (escaped)
+            {
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '"')
+            {
+                return index + 1;
+            }
+
+            index++;
+        }
+
+        return line.Length;
+    }
+
+    private static int FindNumberEnd(string line, int start)
+    {
+        var index = start;
+
+        if (line[index] == '-')
+            index++;
+
+        var hasDigits = false;
+        while (index < line.Length && char.IsDigit(line[index]))
+        {
+            hasDigits = true;
+            index++;
+        }
+
+        if (index < line.Length && line[index] == '.')
+        {
+            index++;
+            while (index < line.Length && char.IsDigit(line[index]))
+            {
+                hasDigits = true;
+                index++;
+            }
+        }
+
+        if (index < line.Length && (line[index] == 'e' || line[index] == 'E'))
+        {
+            index++;
+            if (index < line.Length && (line[index] == '+' || line[index] == '-'))
+                index++;
+
+            while (index < line.Length && char.IsDigit(line[index]))
+            {
+                hasDigits = true;
+                index++;
+            }
+        }
+
+        return hasDigits ? index : start;
+    }
+
+    private static bool StartsWithKeyword(string line, int start, string keyword)
+    {
+        if (start + keyword.Length > line.Length || !line.AsSpan(start, keyword.Length).SequenceEqual(keyword))
+            return false;
+
+        var beforeOk = start == 0 || !IsIdentifierLike(line[start - 1]);
+        var afterIndex = start + keyword.Length;
+        var afterOk = afterIndex >= line.Length || !IsIdentifierLike(line[afterIndex]);
+        return beforeOk && afterOk;
+    }
+
+    private static bool IsIdentifierLike(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+    private static void AppendToken(StringBuilder builder, string cssClass, string token)
+    {
+        builder.Append("<span class=\"")
+            .Append(cssClass)
+            .Append("\">")
+            .Append(WebUtility.HtmlEncode(token))
+            .Append("</span>");
+    }
+}

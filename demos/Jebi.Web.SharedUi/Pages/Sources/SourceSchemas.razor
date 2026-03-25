@@ -1,0 +1,185 @@
+@* Pages/Sources/Sources.razor *@
+@page "/sources"
+@attribute [Authorize]
+@namespace Jebi.Web.Pages.Sources
+
+@using Jebi.Common.Features.Dtos.Model.Source
+@using Jebi.Web.Pages.Sources.Parts
+@inject IJebiService                              SourceService
+@inject Jebi.Web.Services.ErrorNotifier     Notifier
+
+<PageTitle>Source Schemas</PageTitle>
+
+<div class="jebi-page-header">
+    <div class="jebi-page-header__content">
+        <div class="jebi-page-header__eyebrow">Schema Design</div>
+        <h1 class="jebi-page-header__title">Source Schemas</h1>
+        <p class="jebi-page-header__subtitle">
+            Import JSON schemas, mark source identifiers and references, and qualify source structure before binding.
+        </p>
+    </div>
+
+    <div class="jebi-page-header__actions">
+        <button class="btn btn-outline-primary"
+                @onclick="() => showUploader = true">
+            + New Schema
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4 align-items-start">
+    <div class="col-12">
+        <SchemaGrid Schemas="schemas"
+                    Selected="selectedSchema"
+                    SelectedChanged="schema => selectedSchema = schema"
+                    InspectRequested="OpenInspectorAsync"
+                    JsonRequested="OpenJsonSchemaAsync" />
+    </div>
+</div>
+
+@* ─── uploader modal ─── *@
+@if (showUploader)
+{
+    <SchemaUploaderModal OnSchemaAdded="HandleNewSchema"
+                         OnCancel      ="() => showUploader = false" />
+}
+
+@* ─── source inspector ─── *@
+@if (showInspector && inspectorSchema is not null)
+{
+    <JebiInspectorModal IsOpen="showInspector"
+                        Title="@($"Source inspector — {inspectorSchema.Name}")"
+                        DialogSizeClass="jebi-inspector-dialog-source"
+                        ShowLeftPane="false"
+                        OnClose="CloseInspectorAsync">
+        <HeaderActions>
+            <JebiInspectorHeaderActions Completeness="inspectorSchema.Completeness"
+                                        ShowCompleteness="false">
+                <PrefixActions>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            title="View JSON schema"
+                            @onclick="() => OpenJsonSchemaAsync(inspectorSchema)">
+                        {Json}
+                    </button>
+                </PrefixActions>
+            </JebiInspectorHeaderActions>
+        </HeaderActions>
+        <RightContent>
+            <SchemaRefiner Schema="@inspectorSchema"
+                           SchemaChanged="HandleInspectorSchemaUpdated" />
+        </RightContent>
+    </JebiInspectorModal>
+}
+
+@* ─── JSON viewer (floating, draggable) ─── *@
+@if (showJsonInspector && jsonInspectorSchema is not null)
+{
+    <JebiInspectorModal IsOpen="showJsonInspector"
+                        Title="@($"JSON IDE — {jsonInspectorSchema.Name}")"
+                        DialogSizeClass="jebi-inspector-dialog-source-json"
+                        ShowLeftPane="false"
+                        Draggable="true"
+                        OnClose="CloseJsonInspectorAsync">
+        <RightContent>
+            <JsonCodeViewer Json="@jsonInspectorSchema.JsonSchemaContent" />
+        </RightContent>
+    </JebiInspectorModal>
+}
+
+@code {
+    private List<SchemaDetailDto> schemas = [];
+    private SchemaDetailDto? selectedSchema;
+    private bool showUploader;
+    private bool showInspector;
+    private bool showJsonInspector;
+    private SchemaDetailDto? inspectorSchema;
+    private SchemaDetailDto? jsonInspectorSchema;
+
+    /* ───────── init ───────── */
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            schemas = (await SourceService.ListSourceSchemasDeepAsync()).ToList();
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+    }
+
+    /* ───────── handler ────── */
+    private async Task HandleNewSchema(SchemaDetailDto dto)
+    {
+        try
+        {
+            schemas.Insert(0, dto);
+            selectedSchema  = dto;
+            showUploader    = false;
+            inspectorSchema = null;
+            showInspector   = false;
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task HandleSchemaUpdated(SchemaDetailDto dto)
+    {
+        var index = schemas.FindIndex(s => s.Id == dto.Id);
+        if (index >= 0)
+            schemas[index] = dto;
+        else
+            schemas.Insert(0, dto);
+
+        selectedSchema = dto;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenInspectorAsync(SchemaDetailDto schema)
+    {
+        try
+        {
+            var deep = await SourceService.GetSourceSchemaDeepAsync(schema.Id);
+            inspectorSchema = deep;
+            selectedSchema = deep;
+            showInspector = true;
+            await HandleSchemaUpdated(deep);
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+    }
+
+    private async Task OpenJsonSchemaAsync(SchemaDetailDto schema)
+    {
+        try
+        {
+            var deep = inspectorSchema?.Id == schema.Id
+                ? inspectorSchema
+                : await SourceService.GetSourceSchemaDeepAsync(schema.Id);
+
+            jsonInspectorSchema = deep;
+            showJsonInspector = true;
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+    }
+
+    private async Task HandleInspectorSchemaUpdated(SchemaDetailDto dto)
+    {
+        inspectorSchema = dto;
+        await HandleSchemaUpdated(dto);
+    }
+
+    private Task CloseInspectorAsync()
+    {
+        showInspector = false;
+        inspectorSchema = null;
+        return Task.CompletedTask;
+    }
+
+    private Task CloseJsonInspectorAsync()
+    {
+        showJsonInspector = false;
+        jsonInspectorSchema = null;
+        return Task.CompletedTask;
+    }
+}

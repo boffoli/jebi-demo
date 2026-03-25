@@ -1,0 +1,33 @@
+@namespace Jebi.Web.Shared
+
+@if (Nested.Count > 0)
+{
+    <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+        <span class="small fw-semibold text-dark">Nested</span>
+        @foreach (var c in Nested)
+        {
+            <span class="badge border text-dark bg-light"
+                  title="@(c.IsMany ? "1..N relationship" : "1..1 relationship")">
+                @c.Name <span class="text-muted">@(c.IsMany ? "×N" : "×1")</span>
+            </span>
+        }
+    </div>
+}
+@if (Has.Count > 0)
+{
+    <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+        <span class="small fw-semibold text-dark">Has</span>
+        @foreach (var c in Has)
+        {
+            <span class="badge border text-dark bg-light"
+                  title="@(c.IsMany ? "1..N relationship" : "1..1 relationship")">
+                @c.Name <span class="text-muted">@(c.IsMany ? "×N" : "×1")</span>
+            </span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<JebiUiRelationItem> Nested { get; set; } = [];
+    [Parameter] public IReadOnlyList<JebiUiRelationItem> Has { get; set; } = [];
+}

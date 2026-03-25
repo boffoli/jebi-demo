@@ -1,0 +1,108 @@
+{
+  "categories": [
+    {
+      "id_category": "b4564ebe-a9fc-4066-95d7-a467ba092eea",
+      "name": "Electronics"
+    },
+    {
+      "id_category": "1438517a-498a-48b9-83b0-a3c0b5b6b3f7",
+      "name": "Home & Kitchen"
+    },
+    {
+      "id_category": "3c3d6239-11b2-43ca-82e0-30fcfafdae7e",
+      "name": "Sports"
+    },
+    {
+      "id_category": "7ddfce63-70a4-4b66-aef9-615484daea3b",
+      "name": "Books"
+    }
+  ],
+  "warehouses": [
+    {
+      "id_warehouse": "8e61559d-7590-43be-a301-74beaf736c23",
+      "location": "Milan DC"
+    },
+    {
+      "id_warehouse": "69fa9d0f-7e2e-418d-b427-8aeff9d11f60",
+      "location": "Rome DC"
+    },
+    {
+      "id_warehouse": "d5601908-9119-4830-a49d-532482d14399",
+      "location": "Turin DC"
+    }
+  ],
+  "products": [
+    {
+      "id_product": "54c22315-277f-4d68-a360-ee0fc71a85bf",
+      "name": "Smartphone X1",
+      "category_id": "b4564ebe-a9fc-4066-95d7-a467ba092eea",
+      "warehouse_id": "d5601908-9119-4830-a49d-532482d14399"
+    },
+    {
+      "id_product": "c95508c4-b9e4-47ce-83c0-7e75c984ef7b",
+      "name": "Bluetooth Headphones",
+      "category_id": "b4564ebe-a9fc-4066-95d7-a467ba092eea",
+      "warehouse_id": "8e61559d-7590-43be-a301-74beaf736c23"
+    },
+    {
+      "id_product": "3e1cd3a7-5d91-4175-8803-6e11eab2fc1d",
+      "name": "4K Monitor 27\"",
+      "category_id": "b4564ebe-a9fc-4066-95d7-a467ba092eea",
+      "warehouse_id": "8e61559d-7590-43be-a301-74beaf736c23"
+    },
+    {
+      "id_product": "0effe19e-0c1f-4bef-9094-9b3b8edf31e5",
+      "name": "Espresso Machine",
+      "category_id": "1438517a-498a-48b9-83b0-a3c0b5b6b3f7",
+      "warehouse_id": "d5601908-9119-4830-a49d-532482d14399"
+    },
+    {
+      "id_product": "af1f0ff1-7272-49ef-b859-ab833dd274ea",
+      "name": "Air Fryer 5L",
+      "category_id": "1438517a-498a-48b9-83b0-a3c0b5b6b3f7",
+      "warehouse_id": "69fa9d0f-7e2e-418d-b427-8aeff9d11f60"
+    },
+    {
+      "id_product": "70a6b114-c1f6-4329-a070-0254e0aa0d81",
+      "name": "Non‑stick Pan 28cm",
+      "category_id": "1438517a-498a-48b9-83b0-a3c0b5b6b3f7",
+      "warehouse_id": "8e61559d-7590-43be-a301-74beaf736c23"
+    },
+    {
+      "id_product": "935d6aea-8a76-4530-83b0-796ce497acde",
+      "name": "Running Shoes M",
+      "category_id": "3c3d6239-11b2-43ca-82e0-30fcfafdae7e",
+      "warehouse_id": "8e61559d-7590-43be-a301-74beaf736c23"
+    },
+    {
+      "id_product": "53d7acc8-f8df-4c1d-9e82-cbb781319c01",
+      "name": "Yoga Mat Pro",
+      "category_id": "3c3d6239-11b2-43ca-82e0-30fcfafdae7e",
+      "warehouse_id": "8e61559d-7590-43be-a301-74beaf736c23"
+    },
+    {
+      "id_product": "55318ef4-d731-468c-b0ff-ea224887bf4d",
+      "name": "Mountain Bike Helmet",
+      "category_id": "3c3d6239-11b2-43ca-82e0-30fcfafdae7e",
+      "warehouse_id": "d5601908-9119-4830-a49d-532482d14399"
+    },
+    {
+      "id_product": "17da46a5-05e0-4a79-aac6-936ed6c69b97",
+      "name": "Fantasy Novel Vol.1",
+      "category_id": "7ddfce63-70a4-4b66-aef9-615484daea3b",
+      "warehouse_id": "8e61559d-7590-43be-a301-74beaf736c23"
+    },
+    {
+      "id_product": "adbb5485-7ec6-44ef-9d32-eff130bcf1da",
+      "name": "Cookbook: Quick Meals",
+      "category_id": "1438517a-498a-48b9-83b0-a3c0b5b6b3f7",
+      "warehouse_id": "d5601908-9119-4830-a49d-532482d14399"
+    },
+    {
+      "id_product": "3eabec6d-47e0-402e-bc45-10517380f965",
+      "name": "Travel Guide Italy 2025",
+      "category_id": "7ddfce63-70a4-4b66-aef9-615484daea3b",
+      "warehouse_id": "d5601908-9119-4830-a49d-532482d14399"
+    }
+  ]
+}

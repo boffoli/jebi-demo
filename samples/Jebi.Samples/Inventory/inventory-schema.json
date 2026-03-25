@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/inventory.schema.json",
+  "title": "Inventory Ingestion Payload",
+  "type": "object",
+  "required": ["categories", "warehouses", "products"],
+  "additionalProperties": false,
+  "properties": {
+    "categories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/category" }
+    },
+    "warehouses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/warehouse" }
+    },
+    "products": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/product" }
+    }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "category": {
+      "$anchor": "category",
+      "title": "Category",
+      "type": "object",
+      "required": ["id_category", "name"],
+      "properties": {
+        "id_category": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "warehouse": {
+      "$anchor": "warehouse",
+      "title": "Warehouse",
+      "type": "object",
+      "required": ["id_warehouse", "location"],
+      "properties": {
+        "id_warehouse": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "location": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "product": {
+      "$anchor": "product",
+      "title": "Product",
+      "type": "object",
+      "required": ["id_product", "name", "category_id", "warehouse_id"],
+      "properties": {
+        "id_product": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "category_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "warehouse_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

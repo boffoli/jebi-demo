@@ -1,0 +1,152 @@
+@* Pages/Targets/Parts/ContextUploaderModal.razor *@
+@namespace Jebi.Web.Pages.Targets.Parts
+@using Jebi.Common.Features.Dtos.Model.Target
+@using Jebi.Web.Services
+@using Microsoft.EntityFrameworkCore    @* DbUpdateException *@
+@using Microsoft.Data.Sqlite           @* SqliteException   *@
+
+@inject IJebiService TargetService
+@inject IJebiService IngestionService
+@inject ErrorNotifier  Notifier              
+
+@* ─────────── Modal wrapper ─────────── *@
+<div class="modal fade show d-block" tabindex="-1"
+     style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:25%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Context</h5>
+                <button type="button" class="btn-close"
+                        @onclick="() => OnCancel.InvokeAsync()"></button>
+            </div>
+
+            <div class="modal-body">
+                @* ───────── RIGA 1: description ───────── *@
+                <div class="row mb-2">
+                    <div class="col-12">
+                        <label class="form-label mb-1">Description</label>
+                        <input class="form-control form-control-sm"
+                               @bind="newDescription" />
+                    </div>
+                </div>
+
+                @* ───────── RIGA 2: DbContext type ─────── *@
+                <div class="row mb-2">
+                    <div class="col-12">
+                        <label class="form-label mb-1">DbContext Type *</label>
+                        <select class="form-select form-select-sm"
+                                @bind="selectedContextTypeName">
+                            <option value="">-- select a context --</option>
+                            @foreach (var t in availableContexts)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                @* ───────── RIGA 3: bottoni ───────────── *@
+                <div class="row g-2">
+                    <div class="col-6 d-grid">
+                        <button class="btn btn-primary btn-sm"
+                                @onclick="AddContextInfoAsync"
+                                disabled="@(!canUpload)">
+                            @(isUploading ? "Saving…" : "ADD")
+                        </button>
+                    </div>
+                    <div class="col-6 d-grid">
+                        <button class="btn btn-secondary btn-sm"
+                                @onclick="() => OnCancel.InvokeAsync()"
+                                disabled="@isUploading">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /* ───────── parameters ───────── */
+    [Parameter] public EventCallback<TargetContextDetailDto> OnContextInfoAdded { get; set; }
+    [Parameter] public EventCallback                   OnCancel          { get; set; }
+    [Parameter] public IEnumerable<string>?            TakenContextTypeNames { get; set; }
+
+    /* ───────── state ───────── */
+    private string        newDescription          = string.Empty;
+    private string?       selectedContextTypeName;
+    private List<string>  availableContexts       = new();
+    private bool          isUploading;
+
+    private bool canUpload =>
+        !string.IsNullOrWhiteSpace(selectedContextTypeName) && !isUploading;
+
+    /* ───────── life-cycle ──────── */
+    protected override async Task OnInitializedAsync()
+        => await RefreshAvailableContextsAsync();
+
+    protected override async Task OnParametersSetAsync()
+        => await RefreshAvailableContextsAsync();
+
+    private async Task RefreshAvailableContextsAsync()
+    {
+        var all   = await IngestionService.ListRegisteredTargetContextTypeNamesAsync();
+        var taken = TakenContextTypeNames ?? Enumerable.Empty<string>();
+
+        availableContexts = all.Except(taken)
+                               .OrderBy(n => n)
+                               .ToList();
+
+        if (selectedContextTypeName is not null &&
+            !availableContexts.Contains(selectedContextTypeName))
+            selectedContextTypeName = null;
+    }
+
+    /* ───────── command: ADD ────── */
+    private async Task AddContextInfoAsync()
+    {
+        if (!canUpload || selectedContextTypeName is null)
+            return;
+
+        isUploading = true;
+        StateHasChanged();
+
+        try
+        {
+            await IngestionService.SyncTargetContextMetadataAsync(
+                selectedContextTypeName,
+                newDescription);
+
+            var context = await TargetService.GetTargetContextByClassQualifiedNameAsync(selectedContextTypeName);
+            var validated = await TargetService.RefreshTargetContextRuntimeModelValidationAsync(context.Id);
+
+            await OnContextInfoAdded.InvokeAsync(validated);
+
+            // reset form
+            newDescription        = string.Empty;
+            selectedContextTypeName = null;
+            await RefreshAvailableContextsAsync();
+        }
+        catch (DbUpdateException dbEx) when (IsUniqueViolation(dbEx))
+        {
+            await Notifier.Error(
+                new Exception($"Context '{selectedContextTypeName}' already exists."), 5000);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex);            // mostra lo stack trace in dev
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    /* ───────── helpers ─────────── */
+    private static bool IsUniqueViolation(DbUpdateException ex)
+        => ex.InnerException is SqliteException sql
+           && sql.SqliteErrorCode == 19
+           && sql.Message.Contains("DbContextInfos.Name",
+                                  StringComparison.Ordinal);
+}

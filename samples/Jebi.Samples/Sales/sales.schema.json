@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/sales-ingestion.schema.json",
+  "title": "Sales Ingestion Payload",
+  "type": "object",
+  "required": ["customers", "orders", "orderLines"],
+  "additionalProperties": false,
+
+  "properties": {
+    "customers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/customer" }
+    },
+    "orders": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/order" }
+    },
+    "orderLines": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/orderLine" }
+    }
+  },
+
+  "$defs": {
+    "customer": {
+      "type": "object",
+      "title": "Customer",
+      "required": ["id_customer", "fullName"],
+      "additionalProperties": false,
+      "properties": {
+        "id_customer": { "type": "string", "format": "uuid" },
+        "fullName":    { "type": "string" }
+      }
+    },
+    "order": {
+      "type": "object",
+      "title": "Order",
+      "required": ["id_order", "placedAt", "customer_id"],
+      "additionalProperties": false,
+      "properties": {
+        "id_order":    { "type": "string", "format": "uuid" },
+        "placedAt":    { "type": "string", "format": "date-time" },
+        "customer_id": { "type": "string", "format": "uuid" }
+      }
+    },
+    "orderLine": {
+      "type": "object",
+      "title": "Order Line",
+      "required": ["id_line", "order_id", "productName", "quantity"],
+      "additionalProperties": false,
+      "properties": {
+        "id_line":     { "type": "string", "format": "uuid" },
+        "order_id":    { "type": "string", "format": "uuid" },
+        "productName": { "type": "string" },
+        "quantity":    { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

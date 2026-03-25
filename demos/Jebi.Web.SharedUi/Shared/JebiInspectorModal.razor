@@ -1,0 +1,97 @@
+@namespace Jebi.Web.Shared
+@using Microsoft.AspNetCore.Components
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="modal fade show d-block @(Draggable ? "jebi-inspector-draggable jebi-inspector-draggable-wide" : "jebi-inspector-backdrop")" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog @DialogSizeClass @(Centered && !Draggable ? "modal-dialog-centered" : string.Empty) jebi-inspector-dialog" style="@DialogStyle">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0">
+                        <h5 class="modal-title mb-0">@Title</h5>
+                        @if (HeaderActions is not null)
+                        {
+                            @HeaderActions
+                        }
+                    </div>
+                    <button type="button" class="btn-close ms-2" aria-label="Close" @onclick="CloseAsync"></button>
+                </div>
+
+                <div class="modal-body jebi-inspector-body">
+                    @if (ShowLeftPane)
+                    {
+                        <div class="jebi-inspector-layout">
+                            <section class="jebi-inspector-pane">
+                                @if (!string.IsNullOrWhiteSpace(LeftTitle))
+                                {
+                                    <div class="jebi-inspector-pane-title">@LeftTitle</div>
+                                }
+                                <div class="jebi-inspector-pane-content">
+                                    @LeftContent
+                                </div>
+                            </section>
+
+                            <section class="jebi-inspector-pane">
+                                @if (!string.IsNullOrWhiteSpace(RightTitle))
+                                {
+                                    <div class="jebi-inspector-pane-title">@RightTitle</div>
+                                }
+                                <div class="jebi-inspector-pane-content">
+                                    @RightContent
+                                </div>
+                            </section>
+                        </div>
+                    }
+                    else
+                    {
+                        <section class="jebi-inspector-pane jebi-inspector-pane-single">
+                            @if (!string.IsNullOrWhiteSpace(RightTitle))
+                            {
+                                <div class="jebi-inspector-pane-title">@RightTitle</div>
+                            }
+                            <div class="jebi-inspector-pane-content">
+                                @RightContent
+                            </div>
+                        </section>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAsync">@CloseButtonLabel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "Inspector";
+    [Parameter] public string DialogSizeClass { get; set; } = "modal-xl";
+    [Parameter] public string? DialogStyle { get; set; }
+    [Parameter] public bool Centered { get; set; } = true;
+    [Parameter] public bool Draggable { get; set; }
+    [Parameter] public bool ShowLeftPane { get; set; }
+    [Parameter] public string? LeftTitle { get; set; }
+    [Parameter] public string? RightTitle { get; set; }
+    [Parameter] public string CloseButtonLabel { get; set; } = "Close";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public RenderFragment? LeftContent { get; set; }
+    [Parameter] public RenderFragment? RightContent { get; set; }
+
+    private bool _dragInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && Draggable && !_dragInitialized)
+        {
+            _dragInitialized = true;
+            await JS.InvokeVoidAsync("jebiMakeDraggable");
+        }
+        if (!IsOpen) _dragInitialized = false;
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+}

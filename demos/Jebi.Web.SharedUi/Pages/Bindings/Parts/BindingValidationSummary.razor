@@ -1,0 +1,125 @@
+@namespace Jebi.Web.Pages.Bindings.Parts
+@using Jebi.Common.Features.Dtos.Model.Binding
+
+@if (HasAnyIssues)
+{
+    <details class="jebi-binding-validation-summary mb-3" open="@OpenByDefault">
+        <summary>
+            <span class="jebi-binding-validation-summary__title">@Title</span>
+            <span class="jebi-binding-validation-summary__meta">@SummaryText</span>
+        </summary>
+
+        <div class="jebi-binding-validation-summary__body">
+            @if (SafeConfigurationIssues.Count > 0)
+            {
+                <section class="jebi-binding-validation-summary__section">
+                    <ul class="jebi-binding-validation-summary__list">
+                        @foreach (var issue in SafeConfigurationIssues)
+                        {
+                            <li>@FormatIssueMessage(issue.Message)</li>
+                        }
+                    </ul>
+                </section>
+            }
+
+            @if (SafeEntityGroups.Count > 0)
+            {
+                <section class="jebi-binding-validation-summary__section">
+                    @foreach (var group in SafeEntityGroups)
+                    {
+                        <div class="jebi-binding-validation-summary__group">
+                            <div class="jebi-binding-validation-summary__group-label">@group.Label</div>
+                            <ul class="jebi-binding-validation-summary__list">
+                                @foreach (var issue in group.Issues)
+                                {
+                                    <li>@FormatIssueMessage(issue.Message)</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (SafePropertyGroups.Count > 0)
+            {
+                <section class="jebi-binding-validation-summary__section">
+                    @foreach (var group in SafePropertyGroups)
+                    {
+                        <div class="jebi-binding-validation-summary__group">
+                            <div class="jebi-binding-validation-summary__group-label">@group.Label</div>
+                            <ul class="jebi-binding-validation-summary__list">
+                                @foreach (var issue in group.Issues)
+                                {
+                                    <li>@FormatIssueMessage(issue.Message)</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    </details>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "Validation issues";
+    [Parameter] public bool OpenByDefault { get; set; }
+    [Parameter] public IReadOnlyCollection<BindingValidationIssueDto>? ConfigurationIssues { get; set; }
+    [Parameter] public IReadOnlyCollection<BindingValidationGroup>? EntityGroups { get; set; }
+    [Parameter] public IReadOnlyCollection<BindingValidationGroup>? PropertyGroups { get; set; }
+
+    private IReadOnlyCollection<BindingValidationIssueDto> SafeConfigurationIssues => ConfigurationIssues ?? [];
+    private IReadOnlyCollection<BindingValidationGroup> SafeEntityGroups => EntityGroups ?? [];
+    private IReadOnlyCollection<BindingValidationGroup> SafePropertyGroups => PropertyGroups ?? [];
+
+    private bool HasAnyIssues =>
+        SafeConfigurationIssues.Count > 0
+        || SafeEntityGroups.Count > 0
+        || SafePropertyGroups.Count > 0;
+
+    private string SummaryText
+    {
+        get
+        {
+            var parts = new List<string>();
+
+            if (SafeConfigurationIssues.Count > 0)
+                parts.Add($"{SafeConfigurationIssues.Count}");
+
+            if (SafeEntityGroups.Count > 0)
+                parts.Add($"{SafeEntityGroups.Count}");
+
+            if (SafePropertyGroups.Count > 0)
+                parts.Add($"{SafePropertyGroups.Count}");
+
+            return string.Join(" · ", parts) + " groups";
+        }
+    }
+
+    private static MarkupString FormatIssueMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return (MarkupString)string.Empty;
+
+        static string Escape(string value) => System.Net.WebUtility.HtmlEncode(value);
+        static bool StartsWithLabel(string value, string label) => value.StartsWith(label, StringComparison.OrdinalIgnoreCase);
+        static string StripLabel(string value, string label) => value[label.Length..].TrimStart();
+
+        var lines = message
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var formattedLines = lines.Select(line =>
+        {
+            if (StartsWithLabel(line, "Problem:"))
+                return $"<strong>Problem:</strong> {Escape(StripLabel(line, "Problem:"))}";
+
+            if (StartsWithLabel(line, "Action:"))
+                return $"<strong>Action:</strong> {Escape(StripLabel(line, "Action:"))}";
+
+            return Escape(line);
+        });
+
+        return (MarkupString)string.Join("<br />", formattedLines);
+    }
+}

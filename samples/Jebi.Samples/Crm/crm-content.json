@@ -1,0 +1,113 @@
+{
+  "aziende": [
+    {
+      "id_azienda": "AZ-001",
+      "ragione_sociale": "Alpha Srl",
+      "contatti": []
+    },
+    {
+      "id_azienda": "AZ-002",
+      "ragione_sociale": "Beta SpA",
+      "contatti": [
+        {
+          "id_contatto": 1001,
+          "telefono": "+39 02 1234 5678",
+          "preferenze": { "id_preferenza": 1, "tema": "chiaro" },
+          "note": [
+            { "id_nota": 1, "testo": "Primo contatto" },
+            { "id_nota": 2, "testo": "Follow-up programmato" }
+          ]
+        },
+        {
+          "id_contatto": 1002,
+          "telefono": "+39 02 9999 0000",
+          "preferenze": { "id_preferenza": 2, "tema": "scuro" },
+          "note": []
+        }
+      ]
+    },
+    {
+      "id_azienda": "AZ-003",
+      "ragione_sociale": "Gamma SRL",
+      "contatti": [
+        {
+          "id_contatto": 1003,
+          "telefono": "+39 06 5555 1111",
+          "preferenze": { "id_preferenza": 5, "tema": "scuro" },
+          "note": [ { "id_nota": 3, "testo": "Richiesta preventivo" } ]
+        },
+        {
+          "id_contatto": 1004,
+          "telefono": "+39 06 7777 2222",
+          "preferenze": { "id_preferenza": 3, "tema": "chiaro" },
+          "note": []
+        },
+        {
+          "id_contatto": 1005,
+          "telefono": "+39 011 3333 4444",
+          "preferenze": { "id_preferenza": 4, "tema": "alto-contrasto" },
+          "note": [
+            { "id_nota": 4, "testo": "Inviate condizioni commerciali" },
+            { "id_nota": 5, "testo": "Attesa risposta" }
+          ]
+        }
+      ]
+    }
+  ],
+  "utenti": [
+    {
+      "id_utente": 1,
+      "nome": "Mario Rossi",
+      "contatti": {
+        "id_contatto": 5001,
+        "telefono": "+39 02 1111 2222",
+        "preferenze": { "id_preferenza": 10, "tema": "scuro" },
+        "note": [ { "id_nota": 6, "testo": "Preferisce contatto email" } ]
+      },
+      "ruoli": [
+        { "id_ruolo": 1, "nome": "Admin" },
+        { "id_ruolo": 2, "nome": "Sales" }
+      ]
+    },
+    {
+      "id_utente": 2,
+      "nome": "Luca Bianchi",
+      "contatti": {
+        "id_contatto": 5002,
+        "telefono": "+39 02 3333 4444",
+        "preferenze": { "id_preferenza": 11, "tema": "chiaro" },
+        "note": []
+      },
+      "ruoli": []
+    },
+    {
+      "id_utente": 3,
+      "nome": "Giulia Verdi",
+      "contatti": {
+        "id_contatto": 5003,
+        "telefono": "+39 055 6666 7777",
+        "preferenze": { "id_preferenza": 12, "tema": "chiaro" },
+        "note": [
+          { "id_nota": 7, "testo": "Onboarding completato" },
+          { "id_nota": 8, "testo": "Abilitata a CRM" }
+        ]
+      },
+      "ruoli": [ { "id_ruolo": 3, "nome": "Support" } ]
+    },
+    {
+      "id_utente": 4,
+      "nome": "Sara Neri",
+      "contatti": {
+        "id_contatto": 5004,
+        "telefono": "+39 081 8888 9999",
+        "preferenze": { "id_preferenza": 13, "tema": "alto-contrasto" },
+        "note": [ { "id_nota": 9, "testo": "Lavora da remoto" } ]
+      },
+      "ruoli": [
+        { "id_ruolo": 6, "nome": "Sales" },
+        { "id_ruolo": 4, "nome": "Marketing" },
+        { "id_ruolo": 5, "nome": "Viewer" }
+      ]
+    }
+  ]
+}

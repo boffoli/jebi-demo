@@ -1,0 +1,186 @@
+@namespace Jebi.Web.Pages.DataIngestion.Parts
+@using Jebi.Common.Features.Dtos.Model.Binding
+@using Jebi.Web.Pages.Bindings.Parts
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Data.Sqlite
+
+@inject IJebiService       BindingService
+@inject IJebiService IngestionService
+@inject Jebi.Web.Services.ErrorNotifier Notifier 
+
+<div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:45%;">
+    <div class="modal-content">
+
+      <!-- header -->
+      <div class="modal-header">
+        <h5 class="modal-title">New Ingestion Setup</h5>
+        <button type="button" class="btn-close" @onclick="() => OnCancel.InvokeAsync()"></button>
+      </div>
+
+      <!-- body -->
+      <div class="modal-body p-3">
+
+        <!-- Binding -->
+        <div class="mb-3">
+          <label class="form-label mb-1">Binding configuration *</label>
+          <select class="form-select form-select-sm" @bind="selectedBindingId">
+            <option value="">-- select binding --</option>
+            @foreach (var m in bindings)
+            {
+              <option value="@m.Id">@m.Name @(m.IsValid ? "[Valid]" : "[Invalid]")</option>
+            }
+          </select>
+          <div class="form-text">The setup will use the target provider registered by the selected binding. Only structurally valid bindings can be used.</div>
+          @if (SelectedBinding is not null)
+          {
+            <div class="mt-2">
+              <span class="jebi-binding-state-badge @(SelectedBinding.IsValid ? "jebi-binding-state-badge-ok" : "jebi-binding-state-badge-ko")">
+                @(SelectedBinding.IsValid ? "Valid binding" : "Invalid binding")
+              </span>
+            </div>
+            <BindingValidationSummary
+              Title="Why this binding is invalid"
+              OpenByDefault="true"
+              ConfigurationIssues="SelectedBinding.LocalValidationIssues"
+              EntityGroups="BuildEntityIssueGroups(SelectedBinding)"
+              PropertyGroups="BuildPropertyIssueGroups(SelectedBinding)" />
+          }
+        </div>
+
+        <!-- Name (alias opzionale) -->
+        <div class="mb-3">
+          <label class="form-label mb-1">Name (optional)</label>
+          <input class="form-control form-control-sm"
+                 maxlength="256"
+                 placeholder="e.g. 'CRM nightly import'..."
+                 @bind="name"
+                 @bind:event="oninput" />
+          <div class="form-text">
+            Optional alias shown in the list. Leave empty to skip.
+            @if (!string.IsNullOrEmpty(name))
+            {
+              <span>(@name.Length/256)</span>
+            }
+          </div>
+        </div>
+
+        <div class="row g-2">
+          <div class="col-6 d-grid">
+            <button class="btn btn-primary btn-sm"
+                    disabled="@(!CanCreate)"
+                    @onclick="CreateAsync">
+              @(busy ? "Saving…" : "CREATE")
+            </button>
+          </div>
+          <div class="col-6 d-grid">
+            <button class="btn btn-secondary btn-sm"
+                    disabled="@busy"
+                    @onclick="() => OnCancel.InvokeAsync()">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+@code {
+  /* -------- parameters -------- */
+  [Parameter] public EventCallback<Guid> OnCreated { get; set; }
+  [Parameter] public EventCallback OnCancel { get; set; }
+
+  /* -------- state -------- */
+  private List<BindingDetailDto> bindings = [];
+  private Guid? selectedBindingId;
+  private string? name;
+  private bool busy;
+
+  /* -------- computed -------- */
+  private bool CanCreate =>
+      !busy
+      && SelectedBinding is { IsValid: true }
+      && selectedBindingId is Guid g
+      && g != Guid.Empty
+      && (name?.Length ?? 0) <= 256;
+
+  private BindingDetailDto? SelectedBinding =>
+      selectedBindingId is Guid bindingId
+          ? bindings.FirstOrDefault(binding => binding.Id == bindingId)
+          : null;
+
+  /* -------- lifecycle -------- */
+  protected override async Task OnInitializedAsync()
+  {
+    try
+    {
+      bindings = (await BindingService.ListBindingConfigurationsAsync())
+        .OrderByDescending(binding => binding.IsValid)
+        .ThenBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+    }
+    catch (Exception ex)
+    {
+      await Notifier.Error(ex, 8_000);
+      await OnCancel.InvokeAsync();
+    }
+  }
+
+  /* -------- commands -------- */
+  private async Task CreateAsync()
+  {
+    if (!CanCreate) return;
+
+    busy = true;
+    try
+    {
+      // Normalizza alias: vuoto/whitespace -> null
+      var alias = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+
+      // crea setup usando il provider registrato dalla binding + alias opzionale
+      var newId = await IngestionService.CreateIngestionSetupWithRegisteredProviderAsync(selectedBindingId!.Value, alias);
+      await OnCreated.InvokeAsync(newId);
+    }
+    catch (DbUpdateException dbEx)
+    {
+      await Notifier.Error(dbEx, 8_000);
+    }
+    catch (SqliteException sqlEx)
+    {
+      await Notifier.Error(sqlEx, 8_000);
+    }
+    catch (Exception ex)
+    {
+      await Notifier.Error(ex, 8_000);
+    }
+    finally
+    {
+      busy = false;
+    }
+  }
+
+  private static IReadOnlyCollection<BindingValidationGroup> BuildEntityIssueGroups(BindingDetailDto? binding)
+      => binding?.EntityRules
+          .Where(rule => rule.LocalValidationIssues.Count > 0)
+          .Select((rule, index) => new BindingValidationGroup
+          {
+              Label = $"Entity rule {index + 1}",
+              Issues = rule.LocalValidationIssues
+          })
+          .ToList()
+         ?? [];
+
+  private static IReadOnlyCollection<BindingValidationGroup> BuildPropertyIssueGroups(BindingDetailDto? binding)
+      => binding?.EntityRules
+          .SelectMany(rule => rule.PropertyRules)
+          .Where(rule => rule.LocalValidationIssues.Count > 0)
+          .Select((rule, index) => new BindingValidationGroup
+          {
+              Label = $"Property rule {index + 1}",
+              Issues = rule.LocalValidationIssues
+          })
+          .ToList()
+         ?? [];
+}

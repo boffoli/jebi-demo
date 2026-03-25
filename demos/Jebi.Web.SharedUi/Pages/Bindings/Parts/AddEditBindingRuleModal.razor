@@ -1,0 +1,676 @@
+@* Pages/Binding/Parts/AddEditBindingRuleModal.razor *@
+@namespace Jebi.Web.Pages.Bindings.Parts
+@using System.Text.Json
+@using Jebi.Common.Features.Dtos.Model.Binding
+@using Jebi.Common.Features.Dtos.Model.Source
+@using Jebi.Common.Features.Dtos.Model.Target
+@inject IJebiService SourceService
+@inject IJebiService TargetService
+@inject IJebiService BindingService
+@inject IJebiService IngestionService
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+<section class="jebi-binding-editor sticky-top" style="top:1rem;">
+    <div class="jebi-binding-editor__toolbar d-flex justify-content-between align-items-center py-2">
+        <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Editor mode">
+                <button type="button"
+                        class="btn @(IsEdit ? "btn-outline-primary" : "btn-primary")"
+                        disabled="@Saving"
+                        @onclick="() => ChangeModeAsync(false)">
+                    Add
+                </button>
+                <button type="button"
+                        class="btn @(IsEdit ? "btn-primary" : "btn-outline-primary")"
+                        disabled="@Saving"
+                        @onclick="() => ChangeModeAsync(true)">
+                    Update
+                </button>
+            </div>
+            @if (IsEdit && !RuleId.HasValue)
+            {
+                <small class="text-muted">
+                    Select a rule from the grid on the left.
+                </small>
+            }
+        </div>
+        <button class="btn btn-sm btn-primary"
+                disabled="@IsApplyDisabled"
+                @onclick="SaveAsync">
+            @(Saving ? "Applying…" : "Apply")
+        </button>
+    </div>
+
+    <div class="jebi-binding-editor__body pt-3">
+        @if (loading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <div class="spinner-border"></div>
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100">
+                            <div class="card-header d-flex align-items-center justify-content-between gap-2">
+                                <span>Source fields</span>
+                            </div>
+                            <div class="card-body" style="max-height:42vh;overflow:auto;">
+                                @if (sourceCandidates.Count == 0)
+                                {
+                                    <em class="text-muted">No entities.</em>
+                                }
+                                else
+                                {
+                                    @foreach (var ent in OrderedSourceEntities())
+                                    {
+                                        <div class="mb-2">
+                                            <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                                                <strong>@ent.Name</strong>
+                                            </div>
+                                            <ul class="list-group list-group-flush">
+                                                @foreach (var p in ent.Fields)
+                                                {
+                                                    bool sel = p.PropertyId == SelectedSourceProp;
+                                                    <li class="list-group-item @(sel ? "bg-primary text-white" : "")"
+                                                        title="@p.DisplayPath"
+                                                        style="cursor:pointer;"
+                                                        @onclick="() => ToggleSource(p.PropertyId)">
+                                                        <div class="d-flex align-items-center justify-content-between gap-2">
+                                                            <span class="text-truncate">@p.Name</span>
+                                                            <span class="jebi-binding-property-flags">
+                                                                @if (IsSuggestedSourceProperty(p))
+                                                                {
+                                                                    <span class="jebi-binding-property-flag jebi-binding-property-flag-suggested">[Suggested]</span>
+                                                                }
+                                                                @if (p.IsKey)
+                                                                {
+                                                                    <span class="jebi-binding-property-flag jebi-binding-property-flag-pk">[PK]</span>
+                                                                }
+                                                                @if (p.IsReference)
+                                                                {
+                                                                    <span class="jebi-binding-property-flag jebi-binding-property-flag-fk">[Ref]</span>
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100">
+                            <div class="card-header d-flex align-items-center justify-content-between gap-2">
+                                <span>Target fields</span>
+                            </div>
+                            <div class="card-body" style="max-height:42vh;overflow:auto;">
+                                <div class="small text-muted mb-2">
+                                    Foreign keys are hidden here and resolved automatically at runtime from entity identity bindings.
+                                </div>
+                                @if (targetCandidates.Count == 0)
+                                {
+                                    <em class="text-muted">No entities.</em>
+                                }
+                                else
+                                {
+                                    @foreach (var ent in OrderedTargetClasses())
+                                    {
+                                        <div class="mb-2">
+                                            <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <strong>@ent.Name</strong>
+                                                    <span class="small text-muted">@(ent.IsOwnedEntity ? "Owned" : "Root")</span>
+                                                </div>
+                                            </div>
+                                            <ul class="list-group list-group-flush">
+                                                @foreach (var p in ent.Fields)
+                                                {
+                                                    bool sel = p.PropertyId == SelectedTargetProp;
+                                                    <li class="list-group-item @(sel ? "bg-primary text-white" : "")"
+                                                        title="@p.DisplayPath"
+                                                        style="cursor:pointer;"
+                                                        @onclick="() => ToggleTarget(p.PropertyId)">
+                                                        <div class="d-flex align-items-center justify-content-between gap-2">
+                                                            <span class="text-truncate">@p.Name</span>
+                                                            <span class="jebi-binding-property-flags">
+                                                                @if (IsSuggestedTargetProperty(p))
+                                                                {
+                                                                    <span class="jebi-binding-property-flag jebi-binding-property-flag-suggested">[Suggested]</span>
+                                                                }
+                                                                @if (p.IsKey)
+                                                                {
+                                                                    <span class="jebi-binding-property-flag jebi-binding-property-flag-pk">[PK]</span>
+                                                                }
+                                                                @if (p.IsRequired)
+                                                                {
+                                                                    <span class="jebi-binding-property-flag jebi-binding-property-flag-required">[Required]</span>
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <div class="card border-0 shadow-sm jebi-binding-expression-summary">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="form-label fw-bold mb-0">Transformation expression</span>
+                                    <span class="text-muted small">(JavaScript, expression-only)</span>
+                                    <i class="bi bi-info-circle text-primary" tabindex="0" role="button" data-bs-toggle="popover"
+                                       data-bs-trigger="focus" title="How it works"
+                                       data-bs-content="Write the JS expression only: value / value.trim() / parseInt(value) etc. No function or return.">
+                                    </i>
+                                </div>
+
+                                <div class="jebi-binding-expression-preview font-monospace mt-2"
+                                     title="@TransformationScriptPreview">
+                                    @TransformationScriptPreview
+                                </div>
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                <button type="button"
+                                        class="btn btn-outline-primary btn-sm"
+                                        @onclick="OpenExpressionEditor">
+                                    Edit expression
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@if (ShowExpressionEditor)
+{
+    <JebiInspectorModal IsOpen="ShowExpressionEditor"
+                        Title="Transformation expression"
+                        ShowLeftPane="false"
+                        DialogSizeClass="jebi-inspector-dialog-expression"
+                        OnClose="CloseExpressionEditorAsync">
+        <HeaderActions>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleTester">
+                <i class="bi bi-play"></i> Test script
+            </button>
+        </HeaderActions>
+
+        <RightContent>
+            <div class="jebi-binding-expression-editor">
+                <textarea class="form-control font-monospace"
+                          style="height:130px"
+                          placeholder='value.toUpperCase()  // example'
+                          @bind="TransformationScript"></textarea>
+
+                <small class="form-text text-muted d-block mt-2">
+                    Use the <code>value</code> variable to reference the source value.
+                    The expression must <b>return</b> the transformed value.
+                </small>
+
+                @if (ShowTester)
+                {
+                    <div class="card mt-3 jebi-binding-tester-card">
+                        <div class="card-body">
+                            <div class="jebi-binding-tester-grid">
+                                <div>
+                                    <label class="form-label">Test input for <code>value</code></label>
+                                    <input class="form-control" @bind="TestInput" placeholder='e.g. " abc " or 42 or true' />
+                                    <div class="form-text">
+                                        The service converts text to the best matching type (string/number/bool/Guid/Date...).
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label">Type hint (optional)</label>
+                                    <select class="form-select" @bind="TestTypeHint">
+                                        <option value="">auto</option>
+                                        <option value="string">string</option>
+                                        <option value="number">number</option>
+                                        <option value="bool">bool</option>
+                                        <option value="guid">guid</option>
+                                        <option value="date">date</option>
+                                    </select>
+                                    <div class="form-text">Force input type when needed.</div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end mt-3">
+                                <button class="btn btn-primary" @onclick="RunTestAsync" disabled="@Testing">
+                                    @(Testing ? "Running…" : "Run")
+                                </button>
+                            </div>
+
+                            <div class="mt-3">
+                                @if (!string.IsNullOrEmpty(TestError))
+                                {
+                                    <div class="alert alert-danger mb-0">
+                                        <strong>Error:</strong> @TestError
+                                    </div>
+                                }
+                                else if (HasTestResult)
+                                {
+                                    <div class="alert alert-success mb-0">
+                                        <div><strong>Result:</strong> <code>@TestOutput</code></div>
+                                        @if (!string.IsNullOrEmpty(TestOutputType))
+                                        {
+                                            <div class="small text-muted">Type: @TestOutputType</div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </RightContent>
+    </JebiInspectorModal>
+}
+
+@code {
+    /* ---------- parameters ---------- */
+    [Parameter] public required BindingDetailDto Configuration { get; set; }
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public Guid? RuleId { get; set; }
+    [Parameter] public int Revision { get; set; }
+    [Parameter] public EventCallback<PropertyBindingRuleAddResultDto> OnRuleAdded { get; set; }
+    [Parameter] public EventCallback<PropertyBindingRuleClientDto> OnRuleEdited { get; set; }
+    [Parameter] public EventCallback<bool> OnModeChanged { get; set; }
+    [Parameter] public EventCallback OnEditCancelled { get; set; }
+
+    /* ---------- state ---------- */
+    private SchemaDetailDto? Schema;
+    private TargetContextDetailDto? Context;
+    private IReadOnlyList<BindingSourceEntityCandidateVm> sourceCandidates = [];
+    private IReadOnlyList<BindingTargetClassCandidateVm> targetCandidates = [];
+    private Guid? SelectedSourceProp;
+    private Guid? SelectedTargetProp;
+    private Guid? _initialSourceProp;
+    private Guid? _initialTargetProp;
+    private string? TransformationScript = "value";
+    private bool Saving;
+    private bool loading = true;
+    private bool ShowExpressionEditor;
+    private bool _suggestionApplied;
+
+    // Tester state
+    private bool ShowTester;
+    private string? TestInput;
+    private string? TestTypeHint;
+    private string? TestOutput;
+    private string? TestOutputType;
+    private string? TestError;
+    private bool Testing;
+    private bool HasTestResult => !string.IsNullOrEmpty(TestOutput) || !string.IsNullOrEmpty(TestError);
+    private string TransformationScriptPreview =>
+        string.IsNullOrWhiteSpace(TransformationScript)
+            ? "No expression configured."
+            : TransformationScript;
+
+    private bool IsApplyDisabled =>
+        Saving
+        || SelectedSourceProp is null
+        || SelectedTargetProp is null
+        || (IsEdit && !RuleId.HasValue);
+
+    private void OpenExpressionEditor()
+    {
+        ShowExpressionEditor = true;
+    }
+
+    private Task CloseExpressionEditorAsync()
+    {
+        ShowExpressionEditor = false;
+        return Task.CompletedTask;
+    }
+
+    /* ---------- change-tracking (prevents component disposal mid-SaveAsync) ---------- */
+    private Guid _prevConfigId;
+    private bool _prevIsEdit;
+    private Guid? _prevRuleId;
+    private int _prevRevision = -1;
+
+    /* ---------- life-cycle ---------- */
+    protected override async Task OnParametersSetAsync()
+    {
+        bool changed = _prevRevision == -1
+                    || _prevConfigId  != Configuration.Id
+                    || _prevIsEdit    != IsEdit
+                    || _prevRuleId    != RuleId
+                    || _prevRevision  != Revision;
+
+        if (!changed) return;
+
+        _prevConfigId  = Configuration.Id;
+        _prevIsEdit    = IsEdit;
+        _prevRuleId    = RuleId;
+        _prevRevision  = Revision;
+
+        // reset form state
+        loading              = true;
+        Schema               = null;
+        Context              = null;
+        sourceCandidates     = [];
+        targetCandidates     = [];
+        _suggestionApplied   = false;
+        SelectedSourceProp   = null;
+        SelectedTargetProp   = null;
+        TransformationScript = "value";
+        ShowTester           = false;
+        TestInput            = null;
+        TestTypeHint         = null;
+        TestOutput           = null;
+        TestOutputType       = null;
+        TestError            = null;
+
+        try
+        {
+            Schema  = await SourceService.GetSourceSchemaDeepAsync(Configuration.JsonSchemaId);
+            Context = await TargetService.GetTargetContextDeepAsync(Configuration.DbContextInfoId);
+            sourceCandidates = BindingCandidateProjection.CreateSourceCandidates(Schema);
+            targetCandidates = BindingCandidateProjection.CreateTargetCandidates(Context);
+
+            if (IsEdit && RuleId is Guid rid)
+            {
+                var cfg  = await BindingService.GetBindingConfigurationDeepAsync(Configuration.Id);
+                var rule = cfg.EntityRules!
+                    .SelectMany(er => er.PropertyRules!)
+                    .FirstOrDefault(r => r.Id == rid);
+
+                if (rule is null)
+                {
+                    await Notifier.Error(new InvalidOperationException("The selected rule no longer exists. Reopen the editor."));
+                    return;
+                }
+
+                SelectedSourceProp   = rule.JsonPropertyId;
+                SelectedTargetProp   = rule.ClassPropertyInfoId;
+                _initialSourceProp   = rule.JsonPropertyId;
+                _initialTargetProp   = rule.ClassPropertyInfoId;
+                TransformationScript = string.IsNullOrWhiteSpace(rule.TransformationScript)
+                    ? "value"
+                    : rule.TransformationScript;
+            }
+            else
+            {
+                ApplySuggestedPairSelectionIfNeeded();
+            }
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex);
+        }
+        finally { loading = false; }
+    }
+
+    /* ---------- helpers ---------- */
+    void ToggleSource(Guid id)
+    {
+        SelectedSourceProp = SelectedSourceProp == id ? null : id;
+        _suggestionApplied = false;
+    }
+
+    void ToggleTarget(Guid id)
+    {
+        SelectedTargetProp = SelectedTargetProp == id ? null : id;
+        _suggestionApplied = false;
+    }
+    void ToggleTester() => ShowTester = !ShowTester;
+    async Task ChangeModeAsync(bool editMode)
+    {
+        if (OnModeChanged.HasDelegate)
+            await OnModeChanged.InvokeAsync(editMode);
+
+        if (!editMode && OnEditCancelled.HasDelegate)
+            await OnEditCancelled.InvokeAsync();
+    }
+
+    private SuggestedBindingPair? SuggestedPair => ResolveSuggestedPair();
+
+    private IEnumerable<BindingSourceEntityCandidateVm> OrderedSourceEntities() =>
+        sourceCandidates
+        .OrderBy(entity => entity.Name, StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<BindingTargetClassCandidateVm> OrderedTargetClasses() =>
+        targetCandidates
+        .OrderBy(@class => @class.Name, StringComparer.OrdinalIgnoreCase);
+
+    private SuggestedBindingPair? ResolveSuggestedPair()
+    {
+        var sourceEntity = sourceCandidates
+            .OrderBy(entity => entity.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        var targetClass = targetCandidates
+            .OrderBy(@class => @class.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+        if (sourceEntity is null || targetClass is null)
+            return null;
+
+        return new SuggestedBindingPair(
+            sourceEntity.EntityId,
+            sourceEntity.Name,
+            targetClass.ClassId,
+            targetClass.Name);
+    }
+
+    private void ApplySuggestedPairSelectionIfNeeded()
+    {
+        if (_suggestionApplied || IsEdit || SelectedSourceProp.HasValue || SelectedTargetProp.HasValue)
+            return;
+
+        ApplySuggestedPairSelection();
+    }
+
+    private void ApplySuggestedPairSelection()
+    {
+        var suggestion = SuggestedPair;
+        if (suggestion is null)
+            return;
+
+        var sourceEntity = FindSourceCandidateById(suggestion.SourceEntityId);
+        var targetClass = FindTargetCandidateById(suggestion.TargetClassId);
+        var sourceProperty = sourceEntity is null ? null : ChooseSuggestedSourceProperty(sourceEntity);
+        var targetProperty = targetClass is null ? null : ChooseSuggestedTargetProperty(targetClass);
+
+        if (sourceProperty is null || targetProperty is null)
+            return;
+
+        SelectedSourceProp = sourceProperty.PropertyId;
+        SelectedTargetProp = targetProperty.PropertyId;
+        _suggestionApplied = true;
+    }
+
+    private static BindingSourceFieldCandidateVm? ChooseSuggestedSourceProperty(BindingSourceEntityCandidateVm sourceEntity) =>
+        sourceEntity.Fields
+            .OrderByDescending(static property => property.IsKey)
+            .ThenBy(static property => property.IsReference)
+            .ThenBy(static property => property.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+    private static BindingTargetFieldCandidateVm? ChooseSuggestedTargetProperty(BindingTargetClassCandidateVm targetClass) =>
+        targetClass.Fields
+            .OrderByDescending(static property => property.IsKey)
+            .ThenByDescending(static property => property.IsRequired)
+            .ThenBy(static property => property.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+    private bool IsSuggestedSourceProperty(BindingSourceFieldCandidateVm property)
+    {
+        if (SuggestedPair is not { } suggestion)
+            return false;
+
+        var sourceEntity = FindSourceCandidateById(suggestion.SourceEntityId);
+        return sourceEntity is not null
+            && ChooseSuggestedSourceProperty(sourceEntity)?.PropertyId == property.PropertyId;
+    }
+
+    private bool IsSuggestedTargetProperty(BindingTargetFieldCandidateVm property)
+    {
+        if (SuggestedPair is not { } suggestion)
+            return false;
+
+        var targetClass = FindTargetCandidateById(suggestion.TargetClassId);
+        return targetClass is not null
+            && ChooseSuggestedTargetProperty(targetClass)?.PropertyId == property.PropertyId;
+    }
+
+    private BindingSourceEntityCandidateVm? FindSourceCandidateById(Guid entityId) =>
+        sourceCandidates.FirstOrDefault(entity => entity.EntityId == entityId);
+
+    private BindingTargetClassCandidateVm? FindTargetCandidateById(Guid classId) =>
+        targetCandidates.FirstOrDefault(@class => @class.ClassId == classId);
+
+    private BindingSourceEntityCandidateVm? FindSourceCandidateByPropertyId(Guid propertyId) =>
+        sourceCandidates.FirstOrDefault(entity => entity.Fields.Any(property => property.PropertyId == propertyId));
+
+    private BindingTargetClassCandidateVm? FindTargetCandidateByPropertyId(Guid propertyId) =>
+        targetCandidates.FirstOrDefault(@class => @class.Fields.Any(property => property.PropertyId == propertyId));
+
+    private sealed record SuggestedBindingPair(
+        Guid SourceEntityId,
+        string SourceEntityName,
+        Guid TargetClassId,
+        string TargetClassName);
+
+    /* ---------- tester command ---------- */
+    async Task RunTestAsync()
+    {
+        if (Testing) return;
+
+        Testing = true;
+        TestError = null;
+        TestOutput = null;
+        TestOutputType = null;
+
+        try
+        {
+            var expr = string.IsNullOrWhiteSpace(TransformationScript) ||
+                       TransformationScript.Trim().Equals("value", StringComparison.Ordinal)
+                       ? "value"
+                       : TransformationScript.Trim();
+
+            var result = await IngestionService.EvaluateTransformationAsync(expr, TestInput, TestTypeHint);
+
+            if (result is string s)
+            {
+                TestOutput = s;
+                TestOutputType = "string";
+            }
+            else
+            {
+                TestOutput = JsonSerializer.Serialize(result);
+                TestOutputType = result?.GetType().Name ?? "null";
+            }
+        }
+        catch (Exception ex)
+        {
+            TestError = ex.Message;
+        }
+        finally
+        {
+            Testing = false;
+        }
+    }
+
+    /* ---------- save command ---------- */
+    async Task SaveAsync()
+    {
+        if (Saving) return;
+        Saving = true;
+
+        try
+        {
+            string? expr = string.IsNullOrWhiteSpace(TransformationScript) ||
+                           TransformationScript.Trim().Equals("value", StringComparison.Ordinal)
+                           ? null
+                           : TransformationScript.Trim();
+
+            if (IsEdit)
+            {
+                if (!RuleId.HasValue)
+                    throw new InvalidOperationException("Select a rule to update.");
+
+                var selectedSource = SelectedSourceProp!.Value;
+                var selectedTarget = SelectedTargetProp!.Value;
+                var sourceChanged = _initialSourceProp.HasValue && selectedSource != _initialSourceProp.Value;
+                var targetChanged = _initialTargetProp.HasValue && selectedTarget != _initialTargetProp.Value;
+
+                if (sourceChanged || targetChanged)
+                {
+                    try
+                    {
+                        var remapResult = await BindingService.UpdatePropertyBindingRuleMappingAsync(
+                            Configuration.Id,
+                            RuleId.Value,
+                            selectedSource,
+                            selectedTarget,
+                            expr);
+
+                        var rebound = await BindingService.GetPropertyBindingRuleAsync(remapResult.PropertyRuleId);
+                        await OnRuleEdited.InvokeAsync(rebound);
+
+                        _initialSourceProp = rebound.JsonPropertyId;
+                        _initialTargetProp = rebound.ClassPropertyInfoId;
+                    }
+                    catch (InvalidOperationException ex) when (
+                        ex.Message.Contains("A rule already exists", StringComparison.OrdinalIgnoreCase) ||
+                        ex.Message.Contains("A rule", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Realign the grid with backend state and focus the already existing rule.
+                        var fresh = await BindingService.GetBindingConfigurationDeepAsync(Configuration.Id);
+                        var existing = fresh.EntityRules!
+                            .SelectMany(er => er.PropertyRules!)
+                            .FirstOrDefault(r =>
+                                r.JsonPropertyId == selectedSource &&
+                                r.ClassPropertyInfoId == selectedTarget);
+
+                        if (existing is not null)
+                            await OnRuleEdited.InvokeAsync(existing);
+
+                        throw;
+                    }
+                }
+                else
+                {
+                    await BindingService.UpdatePropertyBindingRuleScriptAsync(
+                        Configuration.Id,
+                        RuleId.Value,
+                        expr ?? string.Empty);
+
+                    var updated = await BindingService.GetPropertyBindingRuleAsync(RuleId.Value);
+                    await OnRuleEdited.InvokeAsync(updated);
+                }
+            }
+            else
+            {
+                var result = await BindingService.AddPropertyBindingRulesRawAsync(
+                    Configuration.Id,
+                    SelectedSourceProp!.Value,
+                    SelectedTargetProp!.Value,
+                    expr,
+                    overrideExisting: false);
+
+                await OnRuleAdded.InvokeAsync(result);
+            }
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+        finally { Saving = false; }
+    }
+}

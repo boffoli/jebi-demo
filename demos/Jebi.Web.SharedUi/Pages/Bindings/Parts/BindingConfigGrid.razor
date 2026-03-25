@@ -1,0 +1,211 @@
+@* Pages/Binding/Parts/BindingConfigGrid.razor *@
+@namespace Jebi.Web.Pages.Bindings.Parts
+@using System.Linq
+@using Jebi.Common.Features.Dtos.Model.Binding
+@using Microsoft.AspNetCore.Components
+
+@inject IJebiService BindingService
+@inject IJebiService  SourceService
+@inject IJebiService  TargetService
+@inject IJSRuntime Js
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+<div class="card jebi-grid-card mb-4">
+  <div class="card-body p-0">
+    <table class="table table-hover table-sm align-middle mb-0 jebi-grid-table">
+      <colgroup>
+        <col style="width:14rem" />
+        <col style="width:7rem" />
+        <col style="width:12rem" />
+        <col style="width:12rem" />
+        <col style="width:12rem" />
+        <col style="width:4.75rem"  />
+        <col style="width:7rem"  />
+        <col style="width:7rem"  />
+        <col style="width:12rem" />
+      </colgroup>
+
+      <thead class="table-light">
+        <tr>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("name"))">Name@(SI("name"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("valid"))">Status@(SI("valid"))</th>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("desc"))">Description@(SI("desc"))</th>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("source"))">Source@(SI("source"))</th>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("target"))">Target@(SI("target"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("rules"))">#Rules@(SI("rules"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("created"))">Created@(SI("created"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("updated"))">Updated@(SI("updated"))</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+      @if (Configurations is null)
+      {
+        <tr><td colspan="9" class="text-center"><em>Loading…</em></td></tr>
+      }
+      else if (!Configurations.Any())
+      {
+        <tr><td colspan="9" class="text-center text-muted">No configurations</td></tr>
+      }
+      else
+      {
+        @foreach (var cfg in Sorted())
+        {
+          var isSel = Selected?.Id == cfg.Id;
+          <tr class="@(isSel ? "table-primary" : null)"
+              style="cursor:pointer"
+              @onclick="() => OnSelectAsync(cfg)">
+            <td>@cfg.Name</td>
+            <td class="text-center">
+              <span class="jebi-binding-state-badge @(cfg.IsValid ? "jebi-binding-state-badge-ok" : "jebi-binding-state-badge-ko")"
+                    title="@IssueSummary(cfg.ValidationIssues, cfg.IsValid ? "Structurally valid binding configuration" : "Structurally invalid binding configuration")">
+                @(cfg.IsValid ? "Valid" : "Invalid")
+              </span>
+            </td>
+            <td>@cfg.Description</td>
+            <td>@(schemaNames.TryGetValue(cfg.JsonSchemaId, out var sName) && !string.IsNullOrWhiteSpace(sName) ? sName : "—")</td>
+            <td>@(contextNames.TryGetValue(cfg.DbContextInfoId, out var cName) && !string.IsNullOrWhiteSpace(cName) ? cName : "—")</td>
+            <td class="text-center">@cfg.RuleCount</td>
+            <td class="text-center">@cfg.CreatedAt:g</td>
+            <td class="text-center">@cfg.UpdatedAt:g</td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-primary me-1"
+                      title="Inspect configuration"
+                      disabled="@busy"
+                      @onclick:stopPropagation="true"
+                      @onclick="() => OnInspectAsync(cfg)">🔍</button>
+              <button class="btn btn-sm btn-outline-danger" title="Delete configuration" disabled="@busy"
+                      @onclick:stopPropagation="true"
+                      @onclick="() => OnDeleteAsync(cfg)">🗑️</button>
+            </td>
+          </tr>
+        }
+      }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+@code {
+  /* ───────── parameters ───────── */
+  [Parameter] public IReadOnlyList<BindingDetailDto>? Configurations { get; set; }
+  [Parameter] public BindingDetailDto? Selected { get; set; }
+  [Parameter] public EventCallback<BindingDetailDto?> SelectedChanged { get; set; }
+  [Parameter] public EventCallback<BindingDetailDto> InspectRequested { get; set; }
+
+  /* ───────── sort state ───────── */
+  private string _sortCol = "name";
+  private bool   _sortAsc = true;
+  void   SortBy(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } }
+  string SI(string col)     => _sortCol == col ? (_sortAsc ? " ▲" : " ▼") : "";
+
+  IEnumerable<BindingDetailDto> Sorted() => _sortCol switch {
+      "valid"   => _sortAsc ? Configurations!.OrderByDescending(c => c.IsValid).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                             : Configurations!.OrderBy(c => c.IsValid).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
+      "desc"    => _sortAsc ? Configurations!.OrderBy(c => c.Description ?? "", StringComparer.OrdinalIgnoreCase)
+                             : Configurations!.OrderByDescending(c => c.Description ?? "", StringComparer.OrdinalIgnoreCase),
+      "source"  => _sortAsc ? Configurations!.OrderBy(c => schemaNames.TryGetValue(c.JsonSchemaId, out var n) ? n : "", StringComparer.OrdinalIgnoreCase)
+                             : Configurations!.OrderByDescending(c => schemaNames.TryGetValue(c.JsonSchemaId, out var n) ? n : "", StringComparer.OrdinalIgnoreCase),
+      "target"  => _sortAsc ? Configurations!.OrderBy(c => contextNames.TryGetValue(c.DbContextInfoId, out var n) ? n : "", StringComparer.OrdinalIgnoreCase)
+                             : Configurations!.OrderByDescending(c => contextNames.TryGetValue(c.DbContextInfoId, out var n) ? n : "", StringComparer.OrdinalIgnoreCase),
+      "rules"   => _sortAsc ? Configurations!.OrderBy(c => c.RuleCount) : Configurations!.OrderByDescending(c => c.RuleCount),
+      "created" => _sortAsc ? Configurations!.OrderBy(c => c.CreatedAt) : Configurations!.OrderByDescending(c => c.CreatedAt),
+      "updated" => _sortAsc ? Configurations!.OrderBy(c => c.UpdatedAt) : Configurations!.OrderByDescending(c => c.UpdatedAt),
+      _         => _sortAsc ? Configurations!.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                             : Configurations!.OrderByDescending(c => c.Name, StringComparer.OrdinalIgnoreCase),
+  };
+
+  /* ───────── state ───────── */
+  private readonly Dictionary<Guid, string> schemaNames  = new();
+  private readonly Dictionary<Guid, string> contextNames = new();
+  private bool busy;
+
+  private static string IssueSummary(
+      IReadOnlyCollection<BindingValidationIssueDto> issues,
+      string fallback)
+      => issues is { Count: > 0 }
+          ? string.Join(" | ", issues.Select(issue => issue.Message))
+          : fallback;
+
+  protected override async Task OnInitializedAsync()
+  {
+    try
+    {
+      var schemas  = await SourceService.ListSourceSchemasAsync();
+      foreach (var s in schemas)  schemaNames[s.Id] = s.Name;
+
+      var contexts = await TargetService.ListTargetContextsAsync();
+      foreach (var c in contexts) contextNames[c.Id] = c.Name;
+    }
+    catch (Exception ex) { await Notifier.Error(ex); }
+  }
+
+  protected override async Task OnParametersSetAsync()
+  {
+    if (Configurations is null || Configurations.Count == 0) return;
+
+    try
+    {
+      foreach (var id in Configurations.Select(c => c.JsonSchemaId).Distinct().Where(id => !schemaNames.ContainsKey(id)))
+        schemaNames[id] = (await SourceService.GetSourceSchemaAsync(id)).Name;
+
+      foreach (var id in Configurations.Select(c => c.DbContextInfoId).Distinct().Where(id => !contextNames.ContainsKey(id)))
+        contextNames[id] = (await TargetService.GetTargetContextAsync(id)).Name;
+    }
+    catch (Exception ex) { await Notifier.Error(ex); }
+  }
+
+  private async Task OnSelectAsync(BindingDetailDto shallow)
+  {
+    if (busy) return;
+    busy = true;
+    try
+    {
+      var deep = await BindingService.GetBindingConfigurationDeepAsync(shallow.Id);
+      await SelectedChanged.InvokeAsync(deep);
+    }
+    catch (Exception ex) { await Notifier.Error(ex); }
+    finally { busy = false; }
+  }
+
+  private async Task OnDeleteAsync(BindingDetailDto cfg)
+  {
+    if (busy) return;
+    if (!await Js.InvokeAsync<bool>("confirm", $"Delete configuration '{cfg.Name}'?")) return;
+
+    busy = true;
+    try
+    {
+      await BindingService.DeleteBindingConfigurationRawAsync(cfg.Id);
+
+      if (Configurations is List<BindingDetailDto> list)
+      {
+        var deletedWasSelected = Selected?.Id == cfg.Id;
+        list.RemoveAll(x => x.Id == cfg.Id);
+
+        if (deletedWasSelected)
+          await SelectedChanged.InvokeAsync(null);
+
+        StateHasChanged();
+      }
+      else
+      {
+        await SelectedChanged.InvokeAsync(null);
+      }
+    }
+    catch (Exception ex) { await Notifier.Error(ex, 5000); }
+    finally { busy = false; }
+  }
+
+  private async Task OnInspectAsync(BindingDetailDto cfg)
+  {
+    if (busy || !InspectRequested.HasDelegate) return;
+
+    try
+    {
+      await InspectRequested.InvokeAsync(cfg);
+    }
+    catch (Exception ex) { await Notifier.Error(ex, 5000); }
+  }
+}

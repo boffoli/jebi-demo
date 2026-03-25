@@ -1,0 +1,230 @@
+{
+  "customers": [
+    {
+      "id_customer": "07c7d1a8-ec01-4fa6-90b1-7017c61b99f5",
+      "fullName": "Customer 1"
+    },
+    {
+      "id_customer": "87f6517a-21f0-4caf-89be-0a4ca27a76e2",
+      "fullName": "Customer 2"
+    },
+    {
+      "id_customer": "62e50af8-125b-46cb-86bd-4e2adc758380",
+      "fullName": "Customer 3"
+    },
+    {
+      "id_customer": "b69d20a4-b2e2-47a7-8e41-58c83a576694",
+      "fullName": "Customer 4"
+    },
+    {
+      "id_customer": "a2769810-c14a-4c04-89ac-f73de58b5e3a",
+      "fullName": "Customer 5"
+    },
+    {
+      "id_customer": "a2769810-c14a-4c04-89ac-f73de58b5e30",
+      "fullName": "Customer 6"
+    },
+    {
+      "id_customer": "a2769810-c14a-4c04-89ac-f73de58b5e35",
+      "fullName": "Customer 7"
+    }
+  ],
+  "orders": [
+    {
+      "id_order": "3e92490c-dacc-499e-a3df-f5842e060b6d",
+      "placedAt": "2025-06-18T10:04:57Z",
+      "customer_id": "07c7d1a8-ec01-4fa6-90b1-7017c61b99f5"
+    },
+    {
+      "id_order": "62cb407e-5ae7-4dfd-ac46-f7dab573c1f3",
+      "placedAt": "2025-07-27T10:04:57Z",
+      "customer_id": "62e50af8-125b-46cb-86bd-4e2adc758380"
+    },
+    {
+      "id_order": "eb2ae068-5ea9-4e8e-96ea-985212c2ad38",
+      "placedAt": "2025-07-13T10:04:57Z",
+      "customer_id": "87f6517a-21f0-4caf-89be-0a4ca27a76e2"
+    },
+    {
+      "id_order": "2c128602-e550-4988-b5b3-d7398cbd9fd0",
+      "placedAt": "2025-07-20T10:04:57Z",
+      "customer_id": "07c7d1a8-ec01-4fa6-90b1-7017c61b99f5"
+    },
+    {
+      "id_order": "222d2eb1-21c4-4b42-99b9-c97c2fa17de9",
+      "placedAt": "2025-06-15T10:04:57Z",
+      "customer_id": "a2769810-c14a-4c04-89ac-f73de58b5e3a"
+    },
+    {
+      "id_order": "47172f64-e759-4c00-aeca-8b9842ca9719",
+      "placedAt": "2025-07-23T10:04:57Z",
+      "customer_id": "a2769810-c14a-4c04-89ac-f73de58b5e3a"
+    },
+    {
+      "id_order": "9cef19ac-3d5f-429e-a18d-eddd4d5a8650",
+      "placedAt": "2025-07-01T10:04:57Z",
+      "customer_id": "07c7d1a8-ec01-4fa6-90b1-7017c61b99f5"
+    },
+    {
+      "id_order": "f3d6f55d-18ee-413b-8154-d96682c8b3d8",
+      "placedAt": "2025-07-27T10:04:57Z",
+      "customer_id": "07c7d1a8-ec01-4fa6-90b1-7017c61b99f5"
+    },
+    {
+      "id_order": "9817c8b5-00ac-4f17-91d0-c31dc29d9769",
+      "placedAt": "2025-07-15T10:04:57Z",
+      "customer_id": "87f6517a-21f0-4caf-89be-0a4ca27a76e2"
+    },
+    {
+      "id_order": "2515ea54-8054-4b96-aaa0-828f256416db",
+      "placedAt": "2025-06-26T10:04:57Z",
+      "customer_id": "a2769810-c14a-4c04-89ac-f73de58b5e3a"
+    }
+  ],
+  "orderLines": [
+    {
+      "id_line": "ce2cca6b-6e57-4d60-bac3-37ef16abafc2",
+      "order_id": "3e92490c-dacc-499e-a3df-f5842e060b6d",
+      "productName": "Laser Pointer",
+      "quantity": 2
+    },
+    {
+      "id_line": "4e6db6cb-446a-4cdb-a0ac-6aacf9331509",
+      "order_id": "62cb407e-5ae7-4dfd-ac46-f7dab573c1f3",
+      "productName": "Sprocket",
+      "quantity": 4
+    },
+    {
+      "id_line": "54d2027d-29a3-45ea-9439-7711de338c22",
+      "order_id": "62cb407e-5ae7-4dfd-ac46-f7dab573c1f3",
+      "productName": "Magic Wand",
+      "quantity": 3
+    },
+    {
+      "id_line": "b14e8f32-4e62-42a2-b72a-6ed307a7c3d6",
+      "order_id": "62cb407e-5ae7-4dfd-ac46-f7dab573c1f3",
+      "productName": "Widget",
+      "quantity": 2
+    },
+    {
+      "id_line": "8588d67f-4f00-4ff9-ae8c-6b9dd2774e6a",
+      "order_id": "62cb407e-5ae7-4dfd-ac46-f7dab573c1f3",
+      "productName": "Quantum Coil",
+      "quantity": 3
+    },
+    {
+      "id_line": "7651f40e-115c-4f94-995c-daec3d55abfc",
+      "order_id": "eb2ae068-5ea9-4e8e-96ea-985212c2ad38",
+      "productName": "Doodad",
+      "quantity": 2
+    },
+    {
+      "id_line": "d4fb182e-d480-4f79-aca0-58a2724cf25d",
+      "order_id": "eb2ae068-5ea9-4e8e-96ea-985212c2ad38",
+      "productName": "Flux Capacitor",
+      "quantity": 1
+    },
+    {
+      "id_line": "31bafd66-37d9-453c-ae94-163fa732abaa",
+      "order_id": "eb2ae068-5ea9-4e8e-96ea-985212c2ad38",
+      "productName": "Gadget",
+      "quantity": 4
+    },
+    {
+      "id_line": "9e75c89d-be45-4e3f-bfde-3571111ba36a",
+      "order_id": "2c128602-e550-4988-b5b3-d7398cbd9fd0",
+      "productName": "Flux Capacitor",
+      "quantity": 3
+    },
+    {
+      "id_line": "c6bafe0c-2130-4b63-8883-d59ad7feb941",
+      "order_id": "222d2eb1-21c4-4b42-99b9-c97c2fa17de9",
+      "productName": "Widget",
+      "quantity": 4
+    },
+    {
+      "id_line": "4be76ef5-681d-4568-985b-ab09f7cec7b9",
+      "order_id": "222d2eb1-21c4-4b42-99b9-c97c2fa17de9",
+      "productName": "Laser Pointer",
+      "quantity": 1
+    },
+    {
+      "id_line": "3e01b536-c12f-4f76-a181-968121989c6f",
+      "order_id": "222d2eb1-21c4-4b42-99b9-c97c2fa17de9",
+      "productName": "Quantum Coil",
+      "quantity": 1
+    },
+    {
+      "id_line": "fd29d6b1-410c-4454-986e-8e639e1ba7c5",
+      "order_id": "47172f64-e759-4c00-aeca-8b9842ca9719",
+      "productName": "Magic Wand",
+      "quantity": 3
+    },
+    {
+      "id_line": "cd0b1e0c-7350-42f6-a6e2-02824ca5ff97",
+      "order_id": "47172f64-e759-4c00-aeca-8b9842ca9719",
+      "productName": "Magic Wand",
+      "quantity": 2
+    },
+    {
+      "id_line": "a5c8d0d7-f528-4c7f-a7ac-0564e6768148",
+      "order_id": "47172f64-e759-4c00-aeca-8b9842ca9719",
+      "productName": "Gadget",
+      "quantity": 1
+    },
+    {
+      "id_line": "118e9945-600c-40f2-a329-12d34ca2aedb",
+      "order_id": "9cef19ac-3d5f-429e-a18d-eddd4d5a8650",
+      "productName": "Thingamajig",
+      "quantity": 1
+    },
+    {
+      "id_line": "b10bec26-83af-4714-bd05-1283ddfc61c0",
+      "order_id": "9cef19ac-3d5f-429e-a18d-eddd4d5a8650",
+      "productName": "Sprocket",
+      "quantity": 1
+    },
+    {
+      "id_line": "e342c2f7-8d97-44af-b00f-c1efa5eafb6f",
+      "order_id": "f3d6f55d-18ee-413b-8154-d96682c8b3d8",
+      "productName": "Thingamajig",
+      "quantity": 4
+    },
+    {
+      "id_line": "fda5f251-c5ba-4414-965e-a09237700bc7",
+      "order_id": "f3d6f55d-18ee-413b-8154-d96682c8b3d8",
+      "productName": "Flux Capacitor",
+      "quantity": 2
+    },
+    {
+      "id_line": "f7477e7f-4fda-4ace-be5a-93bfdaf1fbd5",
+      "order_id": "f3d6f55d-18ee-413b-8154-d96682c8b3d8",
+      "productName": "Flux Capacitor",
+      "quantity": 3
+    },
+    {
+      "id_line": "2e7fb571-3e01-478a-b982-fe149ca8d4f2",
+      "order_id": "f3d6f55d-18ee-413b-8154-d96682c8b3d8",
+      "productName": "Sprocket",
+      "quantity": 3
+    },
+    {
+      "id_line": "8d4d3d5c-c1d5-4408-803b-88f82b8330e7",
+      "order_id": "9817c8b5-00ac-4f17-91d0-c31dc29d9769",
+      "productName": "Magic Wand",
+      "quantity": 2
+    },
+    {
+      "id_line": "acb375fd-34da-4379-bef1-59ea872e7758",
+      "order_id": "2515ea54-8054-4b96-aaa0-828f256416db",
+      "productName": "Doodad",
+      "quantity": 4
+    },
+    {
+      "id_line": "317bb79b-483b-4913-baf8-07b13595e214",
+      "order_id": "2515ea54-8054-4b96-aaa0-828f256416db",
+      "productName": "Quantum Coil",
+      "quantity": 3
+    }
+  ]
+}

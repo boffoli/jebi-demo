@@ -1,0 +1,181 @@
+@namespace Jebi.Web.Pages.Bindings.Parts
+@using Jebi.Common.Features.Dtos.Model.Binding
+@using Jebi.Common.Features.Dtos.Model.Source
+@using Jebi.Common.Features.Dtos.Model.Target
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Data.Sqlite
+
+@inject IJebiService BindingService
+@inject IJebiService  SourceService
+@inject IJebiService  TargetService
+@inject Jebi.Web.Services.ErrorNotifier Notifier 
+<div class="modal fade show d-block" tabindex="-1"
+     style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:45%;">
+        <div class="modal-content">
+
+            <!-- header -->
+            <div class="modal-header">
+                <h5 class="modal-title">New Binding Configuration</h5>
+                <button type="button" class="btn-close"
+                        @onclick="() => OnCancel.InvokeAsync()"></button>
+            </div>
+
+            <!-- body -->
+            <div class="modal-body p-3">
+
+                @*  RIGA 1 – Name / Description *@
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label mb-1">Name *</label>
+                        <input class="form-control form-control-sm @(nameError is not null ? "is-invalid" : "")"
+                               value="@name"
+                               @oninput="OnNameChanged" />
+                        @if (nameError is not null)
+                        {
+                            <div class="invalid-feedback">@nameError</div>
+                        }
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label mb-1">Description</label>
+                        <input class="form-control form-control-sm" @bind="description" />
+                    </div>
+                </div>
+
+                @*  RIGA 2 – Schema / DbContext *@
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label mb-1">JSON Schema *</label>
+                        <select class="form-select form-select-sm" @bind="selectedSchemaId">
+                            <option value="">-- select schema --</option>
+                            @foreach (var s in schemas)
+                            {
+                                <option value="@s.Id">@s.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label mb-1">DbContext *</label>
+                        <select class="form-select form-select-sm" @bind="selectedCtxId">
+                            <option value="">-- select context --</option>
+                            @foreach (var c in contexts)
+                            {
+                                <option value="@c.Id">@c.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                @*  RIGA 3 – pulsanti *@
+                <div class="row g-2">
+                    <div class="col-6 d-grid">
+                        <button class="btn btn-primary btn-sm"
+                                disabled="@(!canAdd)"
+                                @onclick="AddAsync">
+                            @(busy ? "Saving…" : "ADD")
+                        </button>
+                    </div>
+                    <div class="col-6 d-grid">
+                        <button class="btn btn-secondary btn-sm"
+                                disabled="@busy"
+                                @onclick="() => OnCancel.InvokeAsync()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@code {
+    /* -------- parameters -------- */
+    [Parameter] public EventCallback<BindingDetailDto> OnConfigAdded { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    /* -------- state -------- */
+    private List<SchemaDetailDto>      schemas   = [];
+    private List<TargetContextDetailDto>   contexts  = [];
+    private readonly HashSet<string> existingNames = new(StringComparer.OrdinalIgnoreCase);
+
+    private string name = "";
+    private string description = "";
+    private Guid?  selectedSchemaId;
+    private Guid?  selectedCtxId;
+
+    private bool   busy;
+    private string? nameError;
+
+    /* -------- computed -------- */
+    private bool canAdd =>
+        !busy
+        && nameError is null
+        && !string.IsNullOrWhiteSpace(name)
+        && selectedSchemaId is Guid s && s != Guid.Empty
+        && selectedCtxId  is Guid c && c != Guid.Empty;
+
+    /* -------- lifecycle -------- */
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            schemas   = (await SourceService .ListSourceSchemasAsync()).OrderBy(s => s.Name).ToList();
+            contexts  = (await TargetService .ListTargetContextsAsync()).OrderBy(c => c.Name).ToList();
+
+            var cfgs = await BindingService.ListBindingConfigurationsDeepAsync();
+            foreach (var c in cfgs) existingNames.Add(c.Name);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 8_000);
+            await OnCancel.InvokeAsync();
+        }
+    }
+
+    /* -------- ui helpers -------- */
+    private void OnNameChanged(ChangeEventArgs e)
+    {
+        name = e.Value?.ToString()?.Trim() ?? "";
+        nameError = string.IsNullOrWhiteSpace(name)
+                    ? "Name cannot be empty."
+                    : existingNames.Contains(name)
+                      ? $"Name '{name}' already exists."
+                      : null;
+    }
+
+    /* -------- commands -------- */
+    private async Task AddAsync()
+    {
+        if (!canAdd) return;
+
+        busy = true;
+        try
+        {
+            var dto = await BindingService.CreateBindingConfigurationRawAsync(
+                          selectedSchemaId!.Value,
+                          selectedCtxId!.Value,
+                          name,
+                          description);
+
+            existingNames.Add(dto.Name);
+            await OnConfigAdded.InvokeAsync(dto);
+        }
+        catch (DbUpdateException dbEx)
+        {
+            await Notifier.Error(dbEx, 8_000);
+        }
+        catch (SqliteException sqlEx)
+        {
+            await Notifier.Error(sqlEx, 8_000);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 8_000);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

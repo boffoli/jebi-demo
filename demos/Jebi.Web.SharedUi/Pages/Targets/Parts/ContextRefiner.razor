@@ -1,0 +1,68 @@
+@* Pages/Targets/Parts/ContextRefiner.razor *@
+@namespace Jebi.Web.Pages.Targets.Parts
+@using Jebi.Common.Features.Dtos.Model.Target
+@using Microsoft.AspNetCore.Components
+
+@if (ContextInfo is null)
+{
+    <p class="text-muted">No context selected.</p>
+}
+else
+{
+    <JebiCompletenessPanel Title="Target Completeness" Completeness="ContextInfo.Completeness" />
+
+    @if (ContextInfo.LastRuntimeModelValidationAtUtc is not null)
+    {
+        <div class="small text-muted mb-3">
+            Last check: @ContextInfo.LastRuntimeModelValidationAtUtc.Value.ToLocalTime().ToString("g")
+        </div>
+    }
+
+    <div class="jebi-model-entity-grid">
+        @foreach (var entity in cards)
+        {
+            <JebiEntityCard Name="@entity.Name"
+                            BadgeClass="jebi-binding-state-badge jebi-binding-state-badge-ok"
+                            BadgeLabel="@(entity.IsOwnedEntity ? "Owned" : "Root")">
+                <TableHeader>
+                    <th>Property</th>
+                    @if (!entity.IsOwnedEntity) { <th class="jebi-pk-col">PK</th> }
+                    <th class="jebi-pk-col">Req</th>
+                </TableHeader>
+                <TableBody>
+                    @foreach (var prop in entity.Properties)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@prop.Name</div>
+                            </td>
+                            @if (!entity.IsOwnedEntity)
+                            {
+                                <td class="jebi-pk-col text-center">
+                                    <span class="jebi-source-property-chip jebi-property-dot @(prop.IsKey ? "jebi-source-property-chip-active" : "jebi-source-property-chip-inactive")"></span>
+                                </td>
+                            }
+                            <td class="jebi-pk-col text-center">
+                                <span class="jebi-source-property-chip jebi-property-dot @(prop.IsRequired ? "jebi-source-property-chip-active" : "jebi-source-property-chip-inactive")"></span>
+                            </td>
+                        </tr>
+                    }
+                </TableBody>
+                <Footer>
+                    <JebiEntityRelations Nested="entity.NestedRelations" Has="entity.HasRelations" />
+                </Footer>
+            </JebiEntityCard>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public TargetContextDetailDto? ContextInfo { get; set; }
+    private IReadOnlyList<TargetInspectorCardVm> cards = [];
+
+    protected override Task OnParametersSetAsync()
+    {
+        cards = TargetInspectorProjection.CreateCards(ContextInfo);
+        return Task.CompletedTask;
+    }
+}

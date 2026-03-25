@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "customer",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "countryCode": { "type": "string", "minLength": 2, "maxLength": 2 },
+    "customerId":  { "type": "string" },
+    "name":        { "type": "string" },
+    "age":         { "type": "integer", "minimum": 0 },
+    "email":       { "type": "string", "format": "email" }
+  },
+  "required": ["customerId"]
+}

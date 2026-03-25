@@ -1,0 +1,196 @@
+@* Pages/Sources/Parts/SchemaGrid.razor *@
+@namespace Jebi.Web.Pages.Sources.Parts
+@using Jebi.Common.Features.Dtos.Model.Source
+@inject IJebiService                               SourceService
+@inject IJSRuntime                                   Js
+@inject Jebi.Web.Services.ErrorNotifier      Notifier
+
+<div class="card jebi-grid-card mb-4">
+    <div class="card-body p-0">
+        <table class="table table-hover table-sm align-middle mb-0 jebi-grid-table">
+            <colgroup>
+                <col style="width:18rem" />
+                <col style="width:9.5rem" />
+                <col style="width:11rem" />
+                <col style="width:6.5rem" />
+                <col style="width:7rem" />
+                <col style="width:10.5rem" />
+                <col style="width:10.5rem" />
+                <col style="width:11rem" />
+            </colgroup>
+
+            <thead class="table-light">
+                <tr>
+                    <th class="text-start" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("name"))">Name@(SI("name"))</th>
+                    <th class="text-start" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("desc"))">Description@(SI("desc"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("state"))">Completeness@(SI("state"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("ent"))">#Entities@(SI("ent"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("props"))">#Props@(SI("props"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("created"))">Created@(SI("created"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("updated"))">Updated@(SI("updated"))</th>
+                    <th class="text-center">Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @if (Schemas is null)
+                {
+                    <tr><td colspan="8" class="text-center"><em>Loading…</em></td></tr>
+                }
+                else if (!Schemas.Any())
+                {
+                    <tr><td colspan="8" class="text-center text-muted">No imported schemas</td></tr>
+                }
+                else
+                {
+                    @foreach (var s in Sorted())
+                    {
+                        var entityCount = s.JsonEntities?.Count ?? 0;
+                        var propCount   = s.JsonEntities?.Sum(e => e.JsonProperties?.Count ?? 0) ?? 0;
+                        var isSel       = Selected?.Id == s.Id;
+
+                        <tr class="@(isSel ? "table-primary" : null)"
+                            style="cursor:pointer"
+                            @onclick="() => OnSelect(s)">
+                            <td>@s.Name</td>
+                            <td class="jebi-grid-cell-ellipsis" title="@s.Description">@s.Description</td>
+                            <td class="text-center">
+                                @{
+                                    var completenessLabel = GetGridCompletenessLabel(s.Completeness);
+                                }
+                                @if (!string.IsNullOrWhiteSpace(completenessLabel))
+                                {
+                                    <span class="@GetGridCompletenessBadgeClass(completenessLabel)">@completenessLabel</span>
+                                }
+                            </td>
+                            <td class="text-center">@entityCount</td>
+                            <td class="text-center">@propCount</td>
+                            <td class="text-center">@s.CreatedAt:g</td>
+                            <td class="text-center">@s.UpdatedAt:g</td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary me-1"
+                                        title="Inspect schema"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OnInspectAsync(s)">
+                                    🔍
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                        title="View JSON schema"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OnJsonAsync(s)">
+                                    {Json}
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        title="Delete Schema"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OnDelete(s)">
+                                    🗑️
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    /* parameters */
+    [Parameter] public IReadOnlyList<SchemaDetailDto>? Schemas { get; set; }
+    [Parameter] public SchemaDetailDto?                 Selected { get; set; }
+    [Parameter] public EventCallback<SchemaDetailDto?>  SelectedChanged { get; set; }
+    [Parameter] public EventCallback<SchemaDetailDto>   InspectRequested { get; set; }
+    [Parameter] public EventCallback<SchemaDetailDto>   JsonRequested { get; set; }
+
+    /* sort state */
+    private string _sortCol = "name";
+    private bool   _sortAsc = true;
+    void   SortBy(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } }
+    string SI(string col)     => _sortCol == col ? (_sortAsc ? " ▲" : " ▼") : "";
+
+    IEnumerable<SchemaDetailDto> Sorted() => _sortCol switch {
+        "desc"    => _sortAsc ? Schemas!.OrderBy(s => s.Description ?? "", StringComparer.OrdinalIgnoreCase)
+                               : Schemas!.OrderByDescending(s => s.Description ?? "", StringComparer.OrdinalIgnoreCase),
+        "state"   => _sortAsc ? Schemas!.OrderBy(s => JebiCompletenessDisplay.GetSortRank(s.Completeness))
+                               : Schemas!.OrderByDescending(s => JebiCompletenessDisplay.GetSortRank(s.Completeness)),
+        "ent"     => _sortAsc ? Schemas!.OrderBy(s => s.JsonEntities?.Count ?? 0)
+                               : Schemas!.OrderByDescending(s => s.JsonEntities?.Count ?? 0),
+        "props"   => _sortAsc ? Schemas!.OrderBy(s => s.JsonEntities?.Sum(e => e.JsonProperties?.Count ?? 0) ?? 0)
+                               : Schemas!.OrderByDescending(s => s.JsonEntities?.Sum(e => e.JsonProperties?.Count ?? 0) ?? 0),
+        "created" => _sortAsc ? Schemas!.OrderBy(s => s.CreatedAt) : Schemas!.OrderByDescending(s => s.CreatedAt),
+        "updated" => _sortAsc ? Schemas!.OrderBy(s => s.UpdatedAt) : Schemas!.OrderByDescending(s => s.UpdatedAt),
+        _         => _sortAsc ? Schemas!.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+                               : Schemas!.OrderByDescending(s => s.Name, StringComparer.OrdinalIgnoreCase),
+    };
+
+    /* auto-select prima riga */
+    protected override void OnParametersSet()
+    {
+        if (Selected is null && Schemas?.Any() == true)
+            _ = SelectedChanged.InvokeAsync(Schemas.First());
+    }
+
+    private void OnSelect(SchemaDetailDto schema)
+        => SelectedChanged.InvokeAsync(schema);
+
+    private async Task OnInspectAsync(SchemaDetailDto schema)
+    {
+        if (!InspectRequested.HasDelegate)
+            return;
+
+        try
+        {
+            await InspectRequested.InvokeAsync(schema);
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+    }
+
+    private async Task OnJsonAsync(SchemaDetailDto schema)
+    {
+        if (!JsonRequested.HasDelegate)
+            return;
+
+        try
+        {
+            await JsonRequested.InvokeAsync(schema);
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+    }
+
+    /* ---------------- delete ---------------- */
+    private async Task OnDelete(SchemaDetailDto schema)
+    {
+        try
+        {
+            if (!await Js.InvokeAsync<bool>("confirm", $"Delete schema '{schema.Name}'?"))
+                return;
+
+            await SourceService.DeleteSourceSchemaAsync(schema.Id);
+
+            if (Schemas is List<SchemaDetailDto> list)
+                list.RemoveAll(s => s.Id == schema.Id);
+
+            await SelectedChanged.InvokeAsync(null);
+            StateHasChanged();
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+    }
+
+    private static string? GetGridCompletenessLabel(object? completeness) =>
+        JebiCompletenessDisplay.GetStateName(completeness) switch
+        {
+            "Complete" => "Ok",
+            "NeedsAttention" => "Warning",
+            "Incomplete" => "Error",
+            _ => null
+        };
+
+    private static string GetGridCompletenessBadgeClass(string label) =>
+        label switch
+        {
+            "Ok" => "jebi-binding-state-badge jebi-binding-state-badge-ok",
+            "Warning" => "jebi-binding-state-badge jebi-binding-state-badge-warn",
+            _ => "jebi-binding-state-badge jebi-binding-state-badge-ko"
+        };
+}

@@ -1,0 +1,467 @@
+@* Pages/Binding/Parts/BindingRuleGrid.razor *@
+@namespace Jebi.Web.Pages.Bindings.Parts
+@using Jebi.Common.Features.Dtos.Model.Binding
+@inject IJebiService BindingService
+@inject IJebiService SourceService
+@inject IJebiService TargetService
+@inject IJSRuntime Js
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+@if (IsLoading)
+{
+    <p><em>Loading rules…</em></p>
+}
+else
+{
+    @if (ConfigurationLocalIssues.Count > 0)
+    {
+        <BindingValidationSummary
+            Title="Structural validation issues"
+            OpenByDefault="false"
+            ConfigurationIssues="ConfigurationLocalIssues"
+            EntityGroups="[]"
+            PropertyGroups="[]" />
+    }
+
+    <div class="jebi-grid-shell mb-4">
+        @if (EntityViews.Count == 0)
+        {
+            <div class="p-3 text-center text-muted">No entity rules</div>
+        }
+        else
+        {
+            @foreach (var entity in SortedEntities())
+            {
+                var entityRules = SortedRules(entity.RuleId).ToList();
+
+                <section class="jebi-binding-entity-section">
+                    <div class="jebi-binding-entity-section__header">
+                        <div class="jebi-binding-entity-section__heading">
+                            <div class="jebi-binding-entity-section__eyebrow">Entity rule</div>
+                            <div class="jebi-binding-entity-section__title"
+                                 title="@IssueSummary(entity.ValidationIssues, $"{entity.SourceName} -> {entity.TargetName}")">
+                                @entity.SourceName → @entity.TargetName
+                            </div>
+                        </div>
+                        <span class="jebi-binding-state-badge @(entity.IsValid ? "jebi-binding-state-badge-ok" : "jebi-binding-state-badge-ko")"
+                              title="@IssueSummary(entity.ValidationIssues, entity.IsValid ? "Structurally valid entity rule" : "Structurally invalid entity rule")">
+                            @(entity.IsValid ? "Valid" : "Invalid")
+                        </span>
+                    </div>
+
+                    @if (entity.ValidationIssues.Count > 0)
+                    {
+                        <details class="jebi-binding-entity-section__issues">
+                            <summary class="jebi-binding-entity-section__issues-summary">
+                                <span class="jebi-binding-entity-section__issues-title">Issues</span>
+                                <span class="jebi-binding-entity-section__issues-meta">@entity.ValidationIssues.Distinct().Count() issues</span>
+                            </summary>
+                            <ul class="jebi-binding-entity-section__issues-list">
+                                @foreach (var issue in entity.ValidationIssues.Distinct())
+                                {
+                                    <li>@FormatIssueMessage(issue.Message)</li>
+                                }
+                            </ul>
+                        </details>
+                    }
+
+                    <div class="jebi-binding-property-block">
+                        <table class="table table-sm table-hover align-middle mb-0 jebi-grid-table jebi-binding-property-block__table" style="width: 100%;">
+                            <colgroup>
+                                <col style="width: @(ReadOnly ? "30%" : "27%");" />
+                                <col style="width: @(ReadOnly ? "30%" : "27%");" />
+                                <col style="width: @(ReadOnly ? "30%" : "27%");" />
+                                <col style="width: @(ReadOnly ? "10%" : "11%");" />
+                                @if (!ReadOnly)
+                                {
+                                    <col style="width: 8%;" />
+                                }
+                            </colgroup>
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("src"))">Source@(SI("src"))</th>
+                                    <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("tgt"))">Target@(SI("tgt"))</th>
+                                    <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("script"))">Transformation@(SI("script"))</th>
+                                    <th class="text-center text-nowrap">Origin</th>
+                                    @if (!ReadOnly)
+                                    {
+                                        <th class="text-center text-nowrap">Actions</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (entityRules.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="@(ReadOnly ? 4 : 5)" class="text-center text-muted">
+                                            No property rules
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var r in entityRules)
+                                    {
+                                        var isSel = SelectedRuleId.HasValue && SelectedRuleId.Value == r.RuleId;
+                                        var isInteractive = !ReadOnly && !r.IsAutoGenerated;
+                                        var rowCss = $"{(isSel ? "table-primary " : string.Empty)}{(r.IsAutoGenerated ? "jebi-binding-property-row-auto" : string.Empty)}".Trim();
+                                        <tr class="@rowCss"
+                                            style="cursor:@(isInteractive ? "pointer" : "default")"
+                                            @onclick="() => SelectRuleAsync(r)">
+                                            <td>@r.SourceDisplayName</td>
+                                            <td>@r.TargetDisplayName</td>
+                                            <td><code>@r.TransformationScript</code></td>
+                                            <td class="text-center text-nowrap">
+                                                @if (r.IsAutoGenerated)
+                                                {
+                                                    <span class="jebi-binding-state-badge jebi-binding-state-badge-neutral"
+                                                          title="Auto-generated pk-pk support rule">
+                                                        Auto
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="jebi-binding-state-badge jebi-binding-state-badge-neutral"
+                                                          title="User-defined rule">
+                                                        User
+                                                    </span>
+                                                }
+                                            </td>
+
+                                            @if (!ReadOnly)
+                                            {
+                                                <td class="text-center text-nowrap">
+                                                    @if (r.IsAutoGenerated)
+                                                    {
+                                                        <span></span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-danger" title="Delete rule" disabled="@busy"
+                                                                @onclick:stopPropagation="true"
+                                                                @onclick="() => DeleteRuleAsync(r)">
+                                                            🗑️
+                                                        </button>
+                                                    }
+                                                </td>
+                                            }
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+        }
+    </div>
+}
+
+@code {
+    /* ───────── parameters ───────── */
+    [Parameter] public Guid? ConfigurationId { get; set; }
+    [Parameter] public Guid? SelectedRuleId { get; set; }
+    [Parameter] public EventCallback<BindingDetailDto> OnConfigurationChanged { get; set; }
+    [Parameter] public EventCallback<Guid> OnRuleDeleted { get; set; }
+    [Parameter] public EventCallback<int> OnRuleCountChanged { get; set; }
+    [Parameter] public EventCallback<Guid> OnRuleEditRequested { get; set; }
+
+    /// <summary>Quando true, la griglia è in sola lettura (niente pulsanti né modale).</summary>
+    [Parameter] public bool ReadOnly { get; set; } = false;
+
+    /* ─── sort state ─── */
+    private string _sortCol = "src";
+    private bool   _sortAsc = true;
+    void   SortBy(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } }
+    string SI(string col)     => _sortCol == col ? (_sortAsc ? " ▲" : " ▼") : "";
+
+    IEnumerable<EntityView> SortedEntities()
+        => EntityViews
+            .Where(entity => Rules.Any(rule => rule.EntityRuleId == entity.RuleId))
+            .OrderBy(entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entity => entity.TargetName, StringComparer.OrdinalIgnoreCase);
+
+    IEnumerable<RuleView> SortedRules(Guid entityRuleId)
+    {
+        var query = Rules.Where(rule => rule.EntityRuleId == entityRuleId);
+
+        return _sortCol switch {
+        "tgt"    => _sortAsc ? query.OrderBy(r => r.TargetDisplayName, StringComparer.OrdinalIgnoreCase)
+                              : query.OrderByDescending(r => r.TargetDisplayName, StringComparer.OrdinalIgnoreCase),
+        "script" => _sortAsc ? query.OrderBy(r => r.TransformationScript, StringComparer.OrdinalIgnoreCase)
+                              : query.OrderByDescending(r => r.TransformationScript, StringComparer.OrdinalIgnoreCase),
+        _        => _sortAsc ? query.OrderBy(r => r.SourceDisplayName, StringComparer.OrdinalIgnoreCase)
+                              : query.OrderByDescending(r => r.SourceDisplayName, StringComparer.OrdinalIgnoreCase),
+        };
+    }
+
+    /* ─── internal state ─── */
+    private Guid? _lastConfigId;
+
+    /* ─── incremental edit/add ─── */
+    public async Task AddRule(PropertyBindingRuleClientDto newRuleDto)
+    {
+        await LoadRulesAsync();
+    }
+
+    public Task ReloadAsync() => LoadRulesAsync();
+
+    public void EditRule(PropertyBindingRuleClientDto updatedDto)
+    {
+        var idx = Rules.FindIndex(r => r.RuleId == updatedDto.Id);
+        if (idx >= 0)
+        {
+            Rules[idx].TransformationScript = updatedDto.TransformationScript;
+            StateHasChanged();
+        }
+    }
+
+    /* ───────── state ───────── */
+    private List<RuleView> Rules = new();
+    private List<EntityView> EntityViews = new();
+    private Dictionary<Guid, string> sourceMap = new();
+    private Dictionary<Guid, string> targetMap = new();
+    private Dictionary<Guid, string> sourceEntityMap = new();
+    private Dictionary<Guid, string> targetEntityMap = new();
+    private BindingDetailDto? configurationDto;
+    private bool IsLoading;
+    private bool busy;
+
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+
+    private static MarkupString FormatIssueMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return (MarkupString)string.Empty;
+
+        static string Escape(string value) => System.Net.WebUtility.HtmlEncode(value);
+        static bool StartsWithLabel(string value, string label) => value.StartsWith(label, StringComparison.OrdinalIgnoreCase);
+        static string StripLabel(string value, string label) => value[label.Length..].TrimStart();
+
+        var lines = message
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var formattedLines = lines.Select(line =>
+        {
+            if (StartsWithLabel(line, "Problem:"))
+                return $"<strong>Problem:</strong> {Escape(StripLabel(line, "Problem:"))}";
+
+            if (StartsWithLabel(line, "Action:"))
+                return $"<strong>Action:</strong> {Escape(StripLabel(line, "Action:"))}";
+
+            return Escape(line);
+        });
+
+        return (MarkupString)string.Join("<br />", formattedLines);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ConfigurationId.HasValue && ConfigurationId != _lastConfigId)
+        {
+            _lastConfigId = ConfigurationId;
+            await LoadRulesAsync();
+        }
+    }
+
+    private async Task LoadRulesAsync()
+    {
+        await _loadGate.WaitAsync();
+        try
+        {
+            if (!ConfigurationId.HasValue)
+            {
+                Rules.Clear();
+                if (OnRuleCountChanged.HasDelegate)
+                    await OnRuleCountChanged.InvokeAsync(0);
+                return;
+            }
+
+            IsLoading = true;
+            StateHasChanged();
+
+            configurationDto = await BindingService.GetBindingConfigurationDeepAsync(ConfigurationId.Value);
+
+            var schema  = await SourceService.GetSourceSchemaDeepAsync(configurationDto.JsonSchemaId);
+            var context = await TargetService.GetTargetContextDeepAsync(configurationDto.DbContextInfoId);
+
+            sourceEntityMap = EnumerateSchemaEntities(schema.JsonEntities)
+                .GroupBy(entity => entity.Id)
+                .ToDictionary(group => group.Key, group => group.First().Name);
+            targetEntityMap = EnumerateTargetClasses(context.ClassInfos)
+                .GroupBy(entity => entity.Id)
+                .ToDictionary(group => group.Key, group => group.First().Name);
+            sourceMap = EnumerateSchemaEntities(schema.JsonEntities)
+                .SelectMany(e => e.JsonProperties ?? Enumerable.Empty<Jebi.Common.Features.Dtos.Model.Source.JsonPropertyClientDto>())
+                .GroupBy(property => property.Id)
+                .ToDictionary(group => group.Key, group => group.First().FullName);
+            targetMap = EnumerateTargetClasses(context.ClassInfos)
+                .SelectMany(c => c.PropertyInfos ?? Enumerable.Empty<Jebi.Common.Features.Dtos.Model.Target.TargetClassPropertyDto>())
+                .GroupBy(property => property.Id)
+                .ToDictionary(group => group.Key, group => group.First().FullName);
+
+            EntityViews = (configurationDto.EntityRules ?? Enumerable.Empty<EntityBindingRuleClientDto>())
+                .Select(er => new EntityView
+                {
+                    RuleId = er.Id,
+                    SourceName = sourceEntityMap.TryGetValue(er.JsonEntityId, out var sourceName) ? sourceName : er.JsonEntityId.ToString(),
+                    TargetName = targetEntityMap.TryGetValue(er.ClassInfoId, out var targetName) ? targetName : er.ClassInfoId.ToString(),
+                    IsValid = er.IsValid,
+                    LocalValidationIssues = er.LocalValidationIssues,
+                    ValidationIssues = er.ValidationIssues
+                })
+                .ToList();
+
+            Rules = (configurationDto.EntityRules ?? Enumerable.Empty<EntityBindingRuleClientDto>())
+                .SelectMany(er => (er.PropertyRules ?? Enumerable.Empty<PropertyBindingRuleClientDto>())
+                    .Select(pr => CreateView(pr, er.Id)))
+                .ToList();
+
+            if (OnConfigurationChanged.HasDelegate && configurationDto is not null)
+                await OnConfigurationChanged.InvokeAsync(configurationDto);
+
+            if (OnRuleCountChanged.HasDelegate)
+                await OnRuleCountChanged.InvokeAsync(Rules.Count);
+        }
+        catch (Exception ex) { await Notifier.Error(ex, 5000); }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+            _loadGate.Release();
+        }
+    }
+
+    private RuleView CreateView(PropertyBindingRuleClientDto dto, Guid entityRuleId)
+        => new RuleView
+        {
+            EntityRuleId = entityRuleId,
+            RuleId = dto.Id,
+            IsIdentityRule = TryGetRuleBoolean(dto, "IsIdentityRule"),
+            IsAutoGenerated = TryGetRuleBoolean(dto, "IsAutoGenerated"),
+            IsValid = dto.IsValid,
+            LocalValidationIssues = dto.LocalValidationIssues,
+            ValidationIssues = dto.ValidationIssues,
+            TransformationScript = dto.TransformationScript,
+            SourceFullName = sourceMap.TryGetValue(dto.JsonPropertyId, out var sf) ? sf : dto.JsonPropertyId.ToString(),
+            TargetFullName = targetMap.TryGetValue(dto.ClassPropertyInfoId, out var tf) ? tf : dto.ClassPropertyInfoId.ToString(),
+            SourceDisplayName = CompactPropertyName(sourceMap.TryGetValue(dto.JsonPropertyId, out var sourcePropertyName) ? sourcePropertyName : dto.JsonPropertyId.ToString()),
+            TargetDisplayName = CompactPropertyName(targetMap.TryGetValue(dto.ClassPropertyInfoId, out var targetPropertyName) ? targetPropertyName : dto.ClassPropertyInfoId.ToString())
+        };
+
+    private IReadOnlyCollection<BindingValidationIssueDto> ConfigurationLocalIssues
+        => configurationDto?.LocalValidationIssues ?? [];
+
+    private static IEnumerable<Jebi.Common.Features.Dtos.Model.Source.JsonEntityClientDto> EnumerateSchemaEntities(
+        IEnumerable<Jebi.Common.Features.Dtos.Model.Source.JsonEntityClientDto>? entities)
+    {
+        if (entities is null)
+            yield break;
+
+        foreach (var entity in entities)
+        {
+            yield return entity;
+
+            foreach (var child in EnumerateSchemaEntities(entity.JsonEntities))
+                yield return child;
+        }
+    }
+
+    private static IEnumerable<Jebi.Common.Features.Dtos.Model.Target.TargetClassInfoDto> EnumerateTargetClasses(
+        IEnumerable<Jebi.Common.Features.Dtos.Model.Target.TargetClassInfoDto>? classes)
+    {
+        if (classes is null)
+            yield break;
+
+        foreach (var classInfo in classes)
+        {
+            yield return classInfo;
+
+            foreach (var child in EnumerateTargetClasses(classInfo.ClassInfos))
+                yield return child;
+        }
+    }
+
+    private Task SelectRuleAsync(RuleView r)
+    {
+        if (ReadOnly || r.IsAutoGenerated) return Task.CompletedTask;
+        if (OnRuleEditRequested.HasDelegate)
+            return OnRuleEditRequested.InvokeAsync(r.RuleId);
+        return Task.CompletedTask;
+    }
+
+    private async Task DeleteRuleAsync(RuleView r)
+    {
+        if (ReadOnly || !ConfigurationId.HasValue || busy) return;
+        if (!await Js.InvokeAsync<bool>("confirm", "Delete selected rule?")) return;
+
+        busy = true;
+        try
+        {
+            await BindingService.DeletePropertyBindingRuleAsync(ConfigurationId.Value, r.RuleId);
+
+            if (OnRuleDeleted.HasDelegate)
+                await OnRuleDeleted.InvokeAsync(r.RuleId);
+
+            await LoadRulesAsync();
+
+            if (OnRuleCountChanged.HasDelegate)
+                await OnRuleCountChanged.InvokeAsync(Rules.Count);
+        }
+        catch (Exception ex) { await Notifier.Error(ex, 5000); }
+        finally { busy = false; }
+    }
+
+    private sealed class RuleView
+    {
+        public Guid EntityRuleId { get; set; }
+        public Guid   RuleId { get; set; }
+        public bool IsIdentityRule { get; set; }
+        public bool IsAutoGenerated { get; set; }
+        public bool IsValid { get; set; }
+        public IReadOnlyCollection<BindingValidationIssueDto> LocalValidationIssues { get; set; } = [];
+        public IReadOnlyCollection<BindingValidationIssueDto> ValidationIssues { get; set; } = [];
+        public string TransformationScript { get; set; } = string.Empty;
+        public string SourceFullName { get; set; } = string.Empty;
+        public string SourceDisplayName { get; set; } = string.Empty;
+        public string TargetFullName { get; set; } = string.Empty;
+        public string TargetDisplayName { get; set; } = string.Empty;
+    }
+
+    private sealed class EntityView
+    {
+        public Guid RuleId { get; set; }
+        public string SourceName { get; set; } = string.Empty;
+        public string TargetName { get; set; } = string.Empty;
+        public bool IsValid { get; set; }
+        public IReadOnlyCollection<BindingValidationIssueDto> LocalValidationIssues { get; set; } = [];
+        public IReadOnlyCollection<BindingValidationIssueDto> ValidationIssues { get; set; } = [];
+    }
+
+    private static string IssueSummary(
+        IReadOnlyCollection<BindingValidationIssueDto> issues,
+        string fallback)
+        => issues is { Count: > 0 }
+            ? string.Join(" | ", issues.Select(issue => issue.Message))
+            : fallback;
+
+    private static string CompactPropertyName(string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+            return fullName;
+
+        var lastSeparatorIndex = fullName.LastIndexOf('.');
+        return lastSeparatorIndex >= 0 && lastSeparatorIndex < fullName.Length - 1
+            ? fullName[(lastSeparatorIndex + 1)..]
+            : fullName;
+    }
+
+    private static bool TryGetRuleBoolean(PropertyBindingRuleClientDto rule, string propertyName)
+    {
+        var property = rule.GetType().GetProperty(propertyName);
+        return property?.PropertyType == typeof(bool)
+               && property.GetValue(rule) is bool value
+               && value;
+    }
+}

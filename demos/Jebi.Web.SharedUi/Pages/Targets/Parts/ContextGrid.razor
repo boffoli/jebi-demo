@@ -1,0 +1,200 @@
+@* Pages/Targets/Parts/ContextGrid.razor *@
+@namespace Jebi.Web.Pages.Targets.Parts
+@using System.Linq
+@using Jebi.Common.Features.Dtos.Model.Target
+@using Jebi.Web.Services
+@using Microsoft.AspNetCore.Components
+
+@inject IJebiService TargetService
+@inject IJSRuntime      Js
+@inject ErrorNotifier   Notifier
+
+<div class="card jebi-grid-card mb-4">
+    <div class="card-body p-0">
+        <table class="table table-hover table-sm align-middle mb-0 jebi-grid-table">
+            <colgroup>
+                <col style="width:16rem" />
+                <col style="width:12rem" />
+                <col style="width:8rem" />
+                <col style="width:7rem" />
+                <col style="width:6rem" />
+                <col style="width:6rem" />
+                <col style="width:10.5rem" />
+                <col style="width:10.5rem" />
+                <col style="width:8rem" />
+            </colgroup>
+
+            <thead class="table-light">
+                <tr>
+                    <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("name"))">Name@(SI("name"))</th>
+                    <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("desc"))">Description@(SI("desc"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("runtime"))">Completeness@(SI("runtime"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("sync"))">Sync@(SI("sync"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("ent"))">#Entities@(SI("ent"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("props"))">#Props@(SI("props"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("created"))">Created@(SI("created"))</th>
+                    <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("updated"))">Updated@(SI("updated"))</th>
+                    <th class="text-center">Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @if (ContextInfos is null)
+                {
+                    <tr><td colspan="9" class="text-center"><em>Loading…</em></td></tr>
+                }
+                else if (!ContextInfos.Any())
+                {
+                    <tr><td colspan="9" class="text-center text-muted">No imported contexts</td></tr>
+                }
+                else
+                {
+                    @foreach (var c in Sorted())
+                    {
+                        var entityCount = c.ClassInfos?.Count                          ?? 0;
+                        var propCount   = c.ClassInfos?.Sum(e => e.PropertyInfos?.Count ?? 0) ?? 0;
+                        var isSel       = Selected?.Id == c.Id;
+
+                        <tr class="@(isSel ? "table-primary" : null)"
+                            style="cursor:pointer"
+                            @onclick="() => OnSelect(c)">
+                            <td>@c.Name</td>
+                            <td class="jebi-grid-cell-ellipsis" title="@c.Description">@c.Description</td>
+                            <td class="text-center">
+                                @{
+                                    var completenessLabel = GetGridCompletenessLabel(c.Completeness);
+                                }
+                                @if (!string.IsNullOrWhiteSpace(completenessLabel))
+                                {
+                                    <span class="@GetGridCompletenessBadgeClass(completenessLabel)">@completenessLabel</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="@(c.IsRuntimeModelValid ? "jebi-binding-state-badge jebi-binding-state-badge-ok" : "jebi-binding-state-badge jebi-binding-state-badge-ko")">
+                                    @(c.IsRuntimeModelValid ? "Yes" : "No")
+                                </span>
+                            </td>
+                            <td class="text-center">@entityCount</td>
+                            <td class="text-center">@propCount</td>
+                            <td class="text-center">@c.CreatedAt:g</td>
+                            <td class="text-center">@c.UpdatedAt:g</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-primary me-1"
+                                        title="Inspect context"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OnInspectAsync(c)">
+                                    🔍
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        title="Delete context"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OnDeleteAsync(c)">
+                                    🗑️
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    /* parameters ----------------------------------------------------*/
+    [Parameter] public IReadOnlyList<TargetContextDetailDto>? ContextInfos { get; set; }
+    [Parameter] public TargetContextDetailDto? Selected { get; set; }
+    [Parameter] public EventCallback<TargetContextDetailDto?> SelectedChanged { get; set; }
+    [Parameter] public EventCallback<TargetContextDetailDto> InspectRequested { get; set; }
+    [Parameter] public EventCallback<TargetContextDetailDto>   Deleted        { get; set; }
+
+    /* sort state ----------------------------------------------------*/
+    private string _sortCol = "name";
+    private bool   _sortAsc = true;
+    void   SortBy(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } }
+    string SI(string col)     => _sortCol == col ? (_sortAsc ? " ▲" : " ▼") : "";
+
+    IEnumerable<TargetContextDetailDto> Sorted() => _sortCol switch {
+        "desc"    => _sortAsc ? ContextInfos!.OrderBy(c => c.Description ?? "", StringComparer.OrdinalIgnoreCase)
+                               : ContextInfos!.OrderByDescending(c => c.Description ?? "", StringComparer.OrdinalIgnoreCase),
+        "runtime" => _sortAsc ? ContextInfos!.OrderBy(c => JebiCompletenessDisplay.GetSortRank(c.Completeness))
+                               : ContextInfos!.OrderByDescending(c => JebiCompletenessDisplay.GetSortRank(c.Completeness)),
+        "sync"    => _sortAsc ? ContextInfos!.OrderByDescending(c => c.IsRuntimeModelValid)
+                               : ContextInfos!.OrderBy(c => c.IsRuntimeModelValid),
+        "ent"     => _sortAsc ? ContextInfos!.OrderBy(c => c.ClassInfos?.Count ?? 0)
+                               : ContextInfos!.OrderByDescending(c => c.ClassInfos?.Count ?? 0),
+        "props"   => _sortAsc ? ContextInfos!.OrderBy(c => c.ClassInfos?.Sum(e => e.PropertyInfos?.Count ?? 0) ?? 0)
+                               : ContextInfos!.OrderByDescending(c => c.ClassInfos?.Sum(e => e.PropertyInfos?.Count ?? 0) ?? 0),
+        "created" => _sortAsc ? ContextInfos!.OrderBy(c => c.CreatedAt) : ContextInfos!.OrderByDescending(c => c.CreatedAt),
+        "updated" => _sortAsc ? ContextInfos!.OrderBy(c => c.UpdatedAt) : ContextInfos!.OrderByDescending(c => c.UpdatedAt),
+        _         => _sortAsc ? ContextInfos!.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                               : ContextInfos!.OrderByDescending(c => c.Name, StringComparer.OrdinalIgnoreCase),
+    };
+
+    /* auto-select prima riga ----------------------------------------*/
+    protected override void OnParametersSet()
+    {
+        if (Selected is null && ContextInfos?.Any() == true)
+            _ = SelectedChanged.InvokeAsync(ContextInfos.First());
+    }
+
+    void OnSelect(TargetContextDetailDto ctx) => SelectedChanged.InvokeAsync(ctx);
+
+    private async Task OnInspectAsync(TargetContextDetailDto ctx)
+    {
+        if (!InspectRequested.HasDelegate)
+            return;
+
+        try
+        {
+            await InspectRequested.InvokeAsync(ctx);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 5000);
+        }
+    }
+
+    /* delete --------------------------------------------------------*/
+    private async Task OnDeleteAsync(TargetContextDetailDto ctx)
+    {
+        try
+        {
+            if (!await Js.InvokeAsync<bool>("confirm", $"Delete context '{ctx.Name}'?"))
+                return;
+
+            await TargetService.DeleteTargetContextAsync(ctx.Id);
+
+            if (ContextInfos is List<TargetContextDetailDto> list)
+                list.RemoveAll(x => x.Id == ctx.Id);
+
+            await Deleted.InvokeAsync(ctx);
+            await SelectedChanged.InvokeAsync(null);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 5000);
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private static string? GetGridCompletenessLabel(object? completeness) =>
+        JebiCompletenessDisplay.GetStateName(completeness) switch
+        {
+            "Complete" => "Ok",
+            "NeedsAttention" => "Warning",
+            "Incomplete" => "Error",
+            _ => null
+        };
+
+    private static string GetGridCompletenessBadgeClass(string label) =>
+        label switch
+        {
+            "Ok" => "jebi-binding-state-badge jebi-binding-state-badge-ok",
+            "Warning" => "jebi-binding-state-badge jebi-binding-state-badge-warn",
+            _ => "jebi-binding-state-badge jebi-binding-state-badge-ko"
+        };
+}

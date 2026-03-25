@@ -1,0 +1,367 @@
+@* Pages/DataIngestion/Parts/IngestionRunGrid.razor *@
+@namespace Jebi.Web.Pages.DataIngestion.Parts
+@using System.Linq
+@using Jebi.Common.Features.Dtos.Model.Ingestion
+@inject IJebiService IngestionService
+@inject IJSRuntime Js
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+@if (RenderFrameless)
+{
+  @TableContent()
+}
+else
+{
+  <div class="card jebi-grid-card">
+    <div class="card-header d-flex align-items-center gap-2">
+      <div class="fw-semibold me-auto">Run history</div>
+      <div class="text-muted small me-2">@((Runs?.Count ?? 0)) items</div>
+      @if (!ReadOnly)
+      {
+        <button class="btn btn-sm btn-outline-secondary"
+                title="Refresh runs"
+                disabled="@IsLoading || Busy || !ContextId.HasValue"
+                @onclick="LoadRunsAsync">
+          ⟳
+        </button>
+      }
+    </div>
+    <div class="card-body p-0">
+      @TableContent()
+    </div>
+  </div>
+}
+
+@if (ShowDetailsModal)
+{
+  <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-lg modal-dialog-centered" style="max-width: 70rem;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Run details</h5>
+          <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
+        </div>
+        <div class="modal-body">
+          @if (IsLoadingDetails)
+          {
+            <p class="mb-0"><em>Loading run details…</em></p>
+          }
+          else if (SelectedRunDetails is null)
+          {
+            <p class="mb-0 text-muted">Details are not available for this run.</p>
+          }
+          else
+          {
+            var detail = SelectedRunDetails;
+            var touchedItems = GetTouchedOperations(detail);
+            var technicalOperations = GetTechnicalOperations(detail);
+
+            <div class="jebi-run-details-summary mb-3">
+              <div class="jebi-run-details-tile">
+                <div class="jebi-run-details-tile-label">Outcome</div>
+                <div class="jebi-run-details-tile-value">@(detail.Success ? "Success" : "Failed")</div>
+              </div>
+              <div class="jebi-run-details-tile">
+                <div class="jebi-run-details-tile-label">Entities</div>
+                <div class="jebi-run-details-tile-value">@detail.EntitiesProcessed</div>
+              </div>
+              <div class="jebi-run-details-tile">
+                <div class="jebi-run-details-tile-label">Created</div>
+                <div class="jebi-run-details-tile-value">@detail.InstancesCreated</div>
+              </div>
+              <div class="jebi-run-details-tile">
+                <div class="jebi-run-details-tile-label">Updated</div>
+                <div class="jebi-run-details-tile-value">@detail.InstancesUpdated</div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="fw-semibold mb-2">Touched items</div>
+              @if (touchedItems.Count == 0)
+              {
+                <div class="text-muted small">No item-level details were persisted for this run.</div>
+              }
+              else
+              {
+                <div class="jebi-run-details-list list-group list-group-flush border rounded">
+                  @foreach (var entry in touchedItems)
+                  {
+                    <div class="list-group-item py-2">@entry</div>
+                  }
+                </div>
+              }
+            </div>
+
+            @if (detail.Errors.Count > 0)
+            {
+              <div class="mb-3">
+                <div class="fw-semibold mb-2 text-danger">Errors</div>
+                <div class="jebi-run-details-list list-group list-group-flush border rounded border-danger-subtle">
+                  @foreach (var entry in detail.Errors)
+                  {
+                    <div class="list-group-item py-2 text-danger-emphasis">@entry</div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (technicalOperations.Count > 0)
+            {
+              <details>
+                <summary class="fw-semibold">Technical log</summary>
+                <div class="jebi-run-details-log mt-2">
+                  @foreach (var entry in technicalOperations)
+                  {
+                    <div>@entry</div>
+                  }
+                </div>
+              </details>
+            }
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  /* ───────── parameters ───────── */
+  [Parameter] public Guid? ContextId { get; set; }
+  [Parameter] public bool ReadOnly { get; set; } = false;
+  [Parameter] public bool Busy { get; set; } = false;
+  [Parameter] public EventCallback<Guid> OnRunDeleted { get; set; }
+  [Parameter] public int PageSize { get; set; } = 200;
+  [Parameter] public bool RenderFrameless { get; set; } = false;
+
+  /* ───────── state ───────── */
+  private Guid? _lastContextId;
+  private bool IsLoading;
+  private bool IsLoadingDetails;
+  private bool ShowDetailsModal;
+  private DataIngestionRunResultDto? SelectedRunDetails;
+  private List<DataIngestionRunResultDto> Runs { get; set; } = new();
+
+  /* ───────── sort state ───────── */
+  private string _sortCol = "started";
+  private bool   _sortAsc = false;
+  void   SortBy(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } }
+  string SI(string col)     => _sortCol == col ? (_sortAsc ? " ▲" : " ▼") : "";
+
+  IEnumerable<DataIngestionRunResultDto> SortedRuns() => _sortCol switch {
+      "duration" => _sortAsc
+          ? Runs.OrderBy(r => (r.FinishedAt ?? DateTime.UtcNow) - r.StartedAt)
+          : Runs.OrderByDescending(r => (r.FinishedAt ?? DateTime.UtcNow) - r.StartedAt),
+      "outcome"  => _sortAsc ? Runs.OrderBy(r => r.Success)            : Runs.OrderByDescending(r => r.Success),
+      "entities" => _sortAsc ? Runs.OrderBy(r => r.EntitiesProcessed)  : Runs.OrderByDescending(r => r.EntitiesProcessed),
+      "created"  => _sortAsc ? Runs.OrderBy(EffectiveInstancesCreated)  : Runs.OrderByDescending(EffectiveInstancesCreated),
+      "updated"  => _sortAsc ? Runs.OrderBy(EffectiveInstancesUpdated)  : Runs.OrderByDescending(EffectiveInstancesUpdated),
+      "errors"   => _sortAsc ? Runs.OrderBy(r => r.ErrorCount)         : Runs.OrderByDescending(r => r.ErrorCount),
+      _          => _sortAsc ? Runs.OrderBy(r => r.StartedAt)          : Runs.OrderByDescending(r => r.StartedAt),
+  };
+
+  protected override async Task OnParametersSetAsync()
+  {
+    if (ContextId.HasValue && ContextId != _lastContextId)
+    {
+      _lastContextId = ContextId;
+      await LoadRunsAsync();
+    }
+    else if (!ContextId.HasValue)
+    {
+      _lastContextId = null;
+      Runs.Clear();
+      IsLoading = false;
+    }
+  }
+
+  internal async Task LoadRunsAsync()
+  {
+    if (!ContextId.HasValue) { Runs.Clear(); return; }
+
+    IsLoading = true; StateHasChanged();
+    try
+    {
+      Runs = (await IngestionService.ListIngestionRunsAsync(ContextId.Value, 0, PageSize)).ToList();
+    }
+    catch (Exception ex) { await Notifier.Error(ex, 5000); }
+    finally { IsLoading = false; StateHasChanged(); }
+  }
+
+  private async Task DeleteAsync(Guid runId)
+  {
+    if (ReadOnly || Busy) return;
+    if (!await Js.InvokeAsync<bool>("confirm", "Permanently delete this run?")) return;
+
+    try
+    {
+      await IngestionService.DeleteIngestionRunAsync(runId);
+      Runs.RemoveAll(r => r.Id == runId);
+      StateHasChanged();
+
+      if (OnRunDeleted.HasDelegate)
+        await OnRunDeleted.InvokeAsync(runId);
+    }
+    catch (Exception ex) { await Notifier.Error(ex, 5000); }
+  }
+
+  private async Task OpenDetailsAsync(Guid runId)
+  {
+    ShowDetailsModal = true;
+    IsLoadingDetails = true;
+    SelectedRunDetails = null;
+    StateHasChanged();
+
+    try
+    {
+      SelectedRunDetails = await IngestionService.GetIngestionRunAsync(runId);
+    }
+    catch (Exception ex)
+    {
+      ShowDetailsModal = false;
+      await Notifier.Error(ex, 5000);
+    }
+    finally
+    {
+      IsLoadingDetails = false;
+      StateHasChanged();
+    }
+  }
+
+  private void CloseDetailsModal()
+  {
+    ShowDetailsModal = false;
+    SelectedRunDetails = null;
+    IsLoadingDetails = false;
+  }
+
+  /* ───────── render helper ───────── */
+  private RenderFragment TableContent() => __builder =>
+  {
+    if (IsLoading)
+    {
+      __builder.AddMarkupContent(0, "<div class=\"p-3\"><em>Loading runs…</em></div>");
+      return;
+    }
+
+    <table class="table table-sm table-hover align-middle mb-0 jebi-grid-table">
+      <colgroup>
+        <col style="width:9.5rem" />
+        <col style="width:7rem"  />
+        <col style="width:6rem"  />
+        <col style="width:6.5rem" />
+        <col style="width:6.5rem" />
+        <col style="width:6.5rem" />
+        <col style="width:5.5rem" />
+        <col />
+        @if (!ReadOnly) { <col style="width:8rem" /> }
+      </colgroup>
+
+      <thead class="table-light">
+        <tr>
+          <th style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("started"))">Started@(SI("started"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("duration"))">Duration@(SI("duration"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("outcome"))">Outcome@(SI("outcome"))</th>
+          <th class="text-end" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("entities"))">Entities@(SI("entities"))</th>
+          <th class="text-end" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("created"))">Created@(SI("created"))</th>
+          <th class="text-end" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("updated"))">Updated@(SI("updated"))</th>
+          <th class="text-center" style="cursor:pointer;user-select:none" @onclick="@(() => SortBy("errors"))">Errors@(SI("errors"))</th>
+          <th>Details</th>
+          @if (!ReadOnly) { <th class="text-center">Actions</th> }
+        </tr>
+      </thead>
+
+      <tbody>
+        @if (Runs.Count == 0)
+        {
+          <tr><td colspan="@(ReadOnly ? 8 : 9)" class="text-center text-muted">No runs yet</td></tr>
+        }
+        else
+        {
+          @foreach (var row in SortedRuns().Select((run, index) => new { Run = run, Index = index }))
+          {
+            var r = row.Run;
+            var key = r.Id != Guid.Empty ? r.Id.ToString("N") : $"row-{row.Index}";
+            var (durTxt, durTitle) = DurationOf(r);
+
+            <tr @key="key" title="@($"Run Id: {r.Id}")">
+              <td class="text-nowrap" title="@r.StartedAt.ToString("O")">@r.StartedAt:g</td>
+              <td class="text-center" title="@durTitle">@durTxt</td>
+              <td class="text-center">
+                @if (r.Success) { <span class="text-success">✔</span> } else { <span class="text-danger">✖</span> }
+              </td>
+              <td class="text-end">@r.EntitiesProcessed</td>
+              <td class="text-end" title="@CounterTitle(r, "created")">@EffectiveInstancesCreated(r)</td>
+              <td class="text-end" title="@CounterTitle(r, "updated")">@EffectiveInstancesUpdated(r)</td>
+              <td class="text-center">@r.ErrorCount</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-secondary"
+                        title="View run details"
+                        disabled="@IsLoadingDetails"
+                        @onclick:stopPropagation="true"
+                        @onclick="() => OpenDetailsAsync(r.Id)">
+                  Details
+                </button>
+              </td>
+              @if (!ReadOnly)
+              {
+                <td class="text-center">
+                  <button class="btn btn-sm btn-outline-danger"
+                          title="Delete run"
+                          disabled="@Busy"
+                          @onclick="() => DeleteAsync(r.Id)">
+                    🗑️
+                  </button>
+                </td>
+              }
+            </tr>
+          }
+        }
+      </tbody>
+    </table>;
+  };
+
+  /* ───────── helpers ───────── */
+  private static (string text, string title) DurationOf(DataIngestionRunResultDto r)
+  {
+    var span = (r.FinishedAt ?? DateTime.UtcNow) - r.StartedAt;
+    if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+
+    static string Short(TimeSpan ts)
+    {
+      if (ts.TotalHours   >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+      if (ts.TotalMinutes >= 1) return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+      return $"{ts.Seconds}s";
+    }
+    return (Short(span), $"{span:c}");
+  }
+
+  private static int EffectiveInstancesCreated(DataIngestionRunResultDto run)
+    => run.Success ? run.InstancesCreated : 0;
+
+  private static int EffectiveInstancesUpdated(DataIngestionRunResultDto run)
+    => run.Success ? run.InstancesUpdated : 0;
+
+  private static string CounterTitle(DataIngestionRunResultDto run, string counter)
+  {
+    if (run.Success)
+      return counter.Equals("created", StringComparison.OrdinalIgnoreCase)
+        ? $"Created instances: {run.InstancesCreated}"
+        : $"Updated instances: {run.InstancesUpdated}";
+
+    return "Run failed: effective committed value shown as 0.";
+  }
+
+  private static IReadOnlyList<string> GetTouchedOperations(DataIngestionRunResultDto run)
+    => run.Operations
+      .Where(IsTouchedOperation)
+      .ToList();
+
+  private static IReadOnlyList<string> GetTechnicalOperations(DataIngestionRunResultDto run)
+    => run.Operations
+      .Where(operation => !IsTouchedOperation(operation))
+      .ToList();
+
+  private static bool IsTouchedOperation(string operation)
+    => operation.StartsWith("Create:", StringComparison.OrdinalIgnoreCase)
+       || operation.StartsWith("Update:", StringComparison.OrdinalIgnoreCase);
+}

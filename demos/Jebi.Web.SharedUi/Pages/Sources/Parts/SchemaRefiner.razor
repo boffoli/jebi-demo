@@ -1,0 +1,197 @@
+@namespace Jebi.Web.Pages.Sources.Parts
+@using Jebi.Common.Features.Dtos.Model.Source
+@inject IJebiService SourceService
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+@if (schema is null)
+{
+    <div class="text-center py-4">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading…</span>
+        </div>
+    </div>
+}
+else
+{
+    <JebiCompletenessPanel Title="Source Completeness" Completeness="schema.Completeness" />
+
+    <div class="jebi-model-entity-grid">
+        @foreach (var entity in cards)
+        {
+            var showsPrimaryKey = entity.IdentityKind == JsonEntityIdentityKindDto.Root;
+
+            <JebiEntityCard Name="@entity.Name"
+                            BadgeClass="@GetRoleBadgeClass(entity.IdentityKind)"
+                            BadgeLabel="@GetRoleLabel(entity.IdentityKind)">
+                <HeaderExtra>
+                    <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Entity role">
+                        <button type="button"
+                                class="btn @(entity.IdentityKind == JsonEntityIdentityKindDto.Root ? "btn-primary" : "btn-outline-secondary")"
+                                title="Root entity — a primary key is required"
+                                @onclick="() => SetIdentityKindAsync(entity.EntityId, JsonEntityIdentityKindDto.Root)">
+                            Root
+                        </button>
+                        <button type="button"
+                                class="btn @(entity.IdentityKind == JsonEntityIdentityKindDto.Owned ? "btn-secondary" : "btn-outline-secondary")"
+                                title="Owned entity — no primary key required"
+                                @onclick="() => SetIdentityKindAsync(entity.EntityId, JsonEntityIdentityKindDto.Owned)">
+                            Owned
+                        </button>
+                        <button type="button"
+                                class="btn @(entity.IdentityKind == JsonEntityIdentityKindDto.Unresolved ? "btn-dark" : "btn-outline-secondary")"
+                                title="No role declared yet"
+                                @onclick="() => SetUnresolvedAsync(entity.EntityId)">
+                            Unset
+                        </button>
+                    </div>
+                </HeaderExtra>
+                <TableHeader>
+                    <th>Property</th>
+                    @if (showsPrimaryKey) { <th class="jebi-pk-col">PK</th> }
+                </TableHeader>
+                <TableBody>
+                    @foreach (var property in entity.Properties)
+                    {
+                        <tr @key="property.PropertyId">
+                            <td>
+                                <div class="fw-semibold">@property.Name</div>
+                            </td>
+                            @if (showsPrimaryKey)
+                            {
+                                <td class="jebi-pk-col">
+                                    <button class="jebi-source-property-chip @(property.IsKey ? "jebi-source-property-chip-active" : "jebi-source-property-chip-inactive")"
+                                            title="@(property.IsKey ? "Unset source key" : "Set source key")"
+                                            aria-label="@(property.IsKey ? "Unset primary key" : "Set as primary key")"
+                                            @onclick="() => ToggleKeyAsync(entity.EntityId, property.PropertyId, property.IsKey)">
+                                    </button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </TableBody>
+                <Footer>
+                    <JebiEntityRelations Nested="entity.NestedRelations" Has="entity.HasRelations" />
+                    @if (entity.IdentityKind == JsonEntityIdentityKindDto.Unresolved)
+                    {
+                        <div class="small text-danger mt-1">
+                            Specify Root or Owned.
+                        </div>
+                    }
+                    @if (entity.IdentityKind == JsonEntityIdentityKindDto.Root && !entity.Properties.Any(p => p.IsKey))
+                    {
+                        <div class="small text-danger mt-1">
+                            Select a PK.
+                        </div>
+                    }
+                </Footer>
+            </JebiEntityCard>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public SchemaDetailDto? Schema { get; set; }
+    [Parameter] public EventCallback<SchemaDetailDto> SchemaChanged { get; set; }
+
+    private SchemaDetailDto? schema;
+    private IReadOnlyList<SourceInspectorCardVm> cards = [];
+    private Guid? loadedSchemaId;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Schema is null)
+        {
+            schema = null;
+            cards = [];
+            loadedSchemaId = null;
+            return;
+        }
+
+        if (loadedSchemaId != Schema.Id || schema is null)
+            await LoadSchemaAsync(Schema.Id);
+    }
+
+    private async Task LoadSchemaAsync(Guid schemaId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            schema = await SourceService.GetSourceSchemaDeepAsync(schemaId);
+            cards = SourceInspectorProjection.CreateCards(schema);
+            loadedSchemaId = schema.Id;
+
+            if (SchemaChanged.HasDelegate)
+                await SchemaChanged.InvokeAsync(schema);
+        }
+        catch (Exception ex) { await Notifier.Error(ex); }
+        finally { _gate.Release(); }
+    }
+
+    private async Task SetIdentityKindAsync(Guid entityId, JsonEntityIdentityKindDto kind)
+    {
+        if (schema is null) return;
+        try
+        {
+            await SourceService.SetSourceEntityIdentityKindAsync(entityId, kind);
+            await LoadSchemaAsync(schema.Id);
+        }
+        catch (Exception ex) { await Notifier.Error(ex, 5000); }
+    }
+
+    private async Task SetUnresolvedAsync(Guid entityId)
+    {
+        if (schema is null) return;
+
+        var entity = schema.JsonEntities.FirstOrDefault(x => x.Id == entityId);
+        if (entity is null)
+            return;
+
+        try
+        {
+            if (entity.HasDeclaredKey)
+                await SourceService.ClearSourceEntityKeyAsync(entityId);
+
+            await SourceService.SetSourceEntityIdentityKindAsync(entityId, JsonEntityIdentityKindDto.Unresolved);
+            await LoadSchemaAsync(schema.Id);
+        }
+        catch (Exception ex) { await Notifier.Error(ex, 5000); }
+    }
+
+    private async Task ToggleKeyAsync(Guid entityId, Guid propertyId, bool isRemoving)
+    {
+        if (schema is null) return;
+        var entity = schema.JsonEntities.First(x => x.Id == entityId);
+        try
+        {
+            if (isRemoving)
+            {
+                await SourceService.ClearSourceEntityKeyAsync(entityId);
+            }
+            else
+            {
+                if (entity.IdentityKind == JsonEntityIdentityKindDto.Unresolved)
+                    await SourceService.SetSourceEntityIdentityKindAsync(entityId, JsonEntityIdentityKindDto.Root);
+                await SourceService.DeclareSourceEntityKeyAsync(entityId, propertyId, force: true);
+            }
+            await LoadSchemaAsync(schema.Id);
+        }
+        catch (Exception ex) { await Notifier.Error(ex, 5000); }
+    }
+
+    private static string GetRoleBadgeClass(JsonEntityIdentityKindDto kind)
+        => kind switch
+        {
+            JsonEntityIdentityKindDto.Root => "jebi-binding-state-badge jebi-binding-state-badge-ok",
+            JsonEntityIdentityKindDto.Owned => "jebi-binding-state-badge jebi-binding-state-badge-ok",
+            _ => "jebi-binding-state-badge jebi-binding-state-badge-ko"
+        };
+
+    private static string GetRoleLabel(JsonEntityIdentityKindDto kind)
+        => kind switch
+        {
+            JsonEntityIdentityKindDto.Root => "Root",
+            JsonEntityIdentityKindDto.Owned => "Owned",
+            _ => "Unset"
+        };
+}

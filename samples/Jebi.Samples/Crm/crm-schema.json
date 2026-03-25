@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/aziende-utenti.schema.json",
+  "title": "Aziende e Utenti Payload",
+  "type": "object",
+  "required": ["utenti", "aziende"],
+  "additionalProperties": false,
+  "properties": {
+    "aziende": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/azienda" }
+    },
+    "utenti": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/utente" }
+    }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "nota": {
+      "$anchor": "nota",
+      "type": "object",
+      "required": ["id_nota", "testo"],
+      "additionalProperties": false,
+      "properties": {
+        "id_nota": { "type": "integer" },
+        "testo":   { "type": "string" }
+      }
+    },
+    "preferenza": {
+      "$anchor": "preferenza",
+      "type": "object",
+      "required": ["id_preferenza", "tema"],
+      "additionalProperties": false,
+      "properties": {
+        "id_preferenza": { "type": "integer" },
+        "tema":          { "type": "string" }
+      }
+    },
+    "contatto": {
+      "$anchor": "contatto",
+      "type": "object",
+      "required": ["id_contatto", "telefono", "preferenze", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id_contatto": { "type": "integer" },
+        "telefono":    { "type": "string" },
+        "preferenze":  { "$ref": "#/$defs/preferenza" },
+        "note": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nota" }
+        }
+      }
+    },
+    "azienda": {
+      "$anchor": "azienda",
+      "type": "object",
+      "required": ["id_azienda", "ragione_sociale", "contatti"],
+      "additionalProperties": false,
+      "properties": {
+        "id_azienda":      { "type": "string" },
+        "ragione_sociale": { "type": "string" },
+        "contatti": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/contatto" }
+        }
+      }
+    },
+    "ruolo": {
+      "$anchor": "ruolo",
+      "type": "object",
+      "required": ["id_ruolo", "nome"],
+      "additionalProperties": false,
+      "properties": {
+        "id_ruolo": { "type": "integer" },
+        "nome":     { "type": "string" }
+      }
+    },
+    "utente": {
+      "$anchor": "utente",
+      "type": "object",
+      "required": ["id_utente", "nome", "contatti", "ruoli"],
+      "additionalProperties": false,
+      "properties": {
+        "id_utente": { "type": "integer" },
+        "nome":      { "type": "string" },
+        "contatti":  { "$ref": "#/$defs/contatto" },
+        "ruoli": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ruolo" }
+        }
+      }
+    }
+  }
+}

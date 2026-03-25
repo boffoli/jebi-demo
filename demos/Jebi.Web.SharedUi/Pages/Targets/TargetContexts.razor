@@ -1,0 +1,188 @@
+@* Pages/Targets/Targets.razor *@
+@page "/targets"
+@attribute [Authorize]
+@namespace Jebi.Web.Pages.Targets
+
+@using System.Linq
+@using Jebi.Common.Features.Dtos.Model.Target
+@using Jebi.Web.Pages.Targets.Parts
+@using Jebi.Web.Services
+
+@inject IJebiService TargetService
+@inject ErrorNotifier Notifier
+
+<PageTitle>Target Contexts</PageTitle>
+
+<div class="jebi-page-header">
+    <div class="jebi-page-header__content">
+        <div class="jebi-page-header__eyebrow">Schema Design</div>
+        <h1 class="jebi-page-header__title">Target Contexts</h1>
+        <p class="jebi-page-header__subtitle">
+            Register target DbContext metadata, validate runtime alignment, and inspect target-side structure before binding.
+        </p>
+    </div>
+
+    <div class="jebi-page-header__actions">
+        <button class="btn btn-outline-primary"
+                @onclick="() => showUploader = true">
+            + New Context
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4 align-items-start">
+    <div class="col-12">
+        <ContextGrid ContextInfos="contextInfos"
+                     Selected="selectedContextInfo"
+                     SelectedChanged="ctx => selectedContextInfo = ctx"
+                     InspectRequested="OpenInspectorAsync"
+                     Deleted="OnContextDeleted" />
+    </div>
+</div>
+
+@* ───────── Modale uploader ───────── *@
+@if (showUploader)
+{
+    <ContextUploaderModal TakenContextTypeNames="takenTypeNames"
+                          OnContextInfoAdded="HandleNewContextInfo"
+                          OnCancel="() => showUploader = false" />
+}
+
+@if (showInspector && inspectorContextInfo is not null)
+{
+    <JebiInspectorModal IsOpen="showInspector"
+                        Title="@($"Target inspector — {inspectorContextInfo.Name}")"
+                        DialogSizeClass="jebi-inspector-dialog-target"
+                        ShowLeftPane="false"
+                        OnClose="CloseInspectorAsync">
+        <HeaderActions>
+            <JebiInspectorHeaderActions Completeness="inspectorContextInfo.Completeness"
+                                        ShowCompleteness="false"
+                                        ShowSyncButton="true"
+                                        IsSyncRefreshing="@isRefreshingInspectorSync"
+                                        SyncRequested="RefreshInspectorSyncAsync"
+                                        ShowRuntimeSyncBadge="true"
+                                        RuntimeModelInSync="@inspectorContextInfo.IsRuntimeModelValid" />
+        </HeaderActions>
+        <RightContent>
+            <ContextRefiner ContextInfo="@inspectorContextInfo" />
+        </RightContent>
+    </JebiInspectorModal>
+}
+
+@code {
+    /* ───────── state ───────── */
+    private List<TargetContextDetailDto> contextInfos = [];
+    private TargetContextDetailDto? selectedContextInfo;
+    private TargetContextDetailDto? inspectorContextInfo;
+    private bool showUploader;
+    private bool showInspector;
+    private bool isRefreshingInspectorSync;
+
+    /* DbContext .NET gia importati -> da filtrare nella combo */
+    private IEnumerable<string> takenTypeNames =>
+        contextInfos
+            .Select(ci => ci.ClassQualifiedName)
+            .Where(qn => !string.IsNullOrWhiteSpace(qn));
+
+    /* ───────── life-cycle ─────── */
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            contextInfos = (await TargetService.ListTargetContextsDeepAsync())
+                           .ToList();
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, autoDismissMs: 5000);
+        }
+    }
+
+    /* ───────── callbacks ───────── */
+    private Task HandleNewContextInfo(TargetContextDetailDto dto)
+    {
+        contextInfos.Insert(0, dto);
+        selectedContextInfo = dto;
+        inspectorContextInfo = dto;
+        showUploader = false;
+        return Task.CompletedTask;
+    }
+
+    private Task OnContextDeleted(TargetContextDetailDto dto)
+    {
+        contextInfos.RemoveAll(c => c.Id == dto.Id);
+
+        if (selectedContextInfo?.Id == dto.Id)
+            selectedContextInfo = null;
+
+        if (inspectorContextInfo?.Id == dto.Id)
+        {
+            inspectorContextInfo = null;
+            showInspector = false;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnContextRefreshed(TargetContextDetailDto dto)
+    {
+        var idx = contextInfos.FindIndex(c => c.Id == dto.Id);
+        if (idx >= 0)
+            contextInfos[idx] = dto;
+
+        if (selectedContextInfo?.Id == dto.Id)
+            selectedContextInfo = dto;
+
+        if (inspectorContextInfo?.Id == dto.Id)
+            inspectorContextInfo = dto;
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task OpenInspectorAsync(TargetContextDetailDto ctx)
+    {
+        try
+        {
+            var deep = await TargetService.GetTargetContextDeepAsync(ctx.Id);
+            inspectorContextInfo = deep;
+            selectedContextInfo = deep;
+            showInspector = true;
+            await OnContextRefreshed(deep);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, autoDismissMs: 5000);
+        }
+    }
+
+    private async Task RefreshInspectorSyncAsync()
+    {
+        if (inspectorContextInfo is null)
+            return;
+
+        try
+        {
+            isRefreshingInspectorSync = true;
+            var refreshed = await TargetService.RefreshTargetContextRuntimeModelValidationAsync(inspectorContextInfo.Id);
+            await OnContextRefreshed(refreshed);
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, autoDismissMs: 5000);
+        }
+        finally
+        {
+            isRefreshingInspectorSync = false;
+        }
+    }
+
+    private Task CloseInspectorAsync()
+    {
+        showInspector = false;
+        inspectorContextInfo = null;
+        return Task.CompletedTask;
+    }
+}

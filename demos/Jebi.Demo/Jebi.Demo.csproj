@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Jebi.Web</RootNamespace>
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    <UserSecretsId>Jebi-Demo-LocalSecrets</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jebi.Rest" Version="1.2.17" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Jebi.Samples\Jebi.Samples.csproj" />
+  </ItemGroup>
+
+  <!-- Shared Blazor UI (razor components, pages, wwwroot) -->
+  <ItemGroup>
+    <Compile Include="..\Jebi.Web.SharedUi\Auth\**\*.cs" Link="Auth\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Jebi.Web.SharedUi\Services\ErrorNotifier.cs" Link="Services\ErrorNotifier.cs" />
+    <Compile Include="..\Jebi.Web.SharedUi\Pages\**\*.cs" Link="Pages\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Jebi.Web.SharedUi\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <RazorComponent Include="..\Jebi.Web.SharedUi\App.razor" Link="App.razor" />
+    <RazorComponent Include="..\Jebi.Web.SharedUi\Pages\**\*.razor" Link="Pages\%(RecursiveDir)%(Filename)%(Extension)" />
+    <RazorComponent Include="..\Jebi.Web.SharedUi\Shared\**\*.razor" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\Jebi.Web.SharedUi\_Imports.razor" Link="_Imports.razor" />
+    <Content Include="..\Jebi.Web.SharedUi\Pages\**\*.cshtml" Link="Pages\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\Jebi.Web.SharedUi\Shared\**\*.razor.css" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\Jebi.Web.SharedUi\wwwroot\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Sample SQLite seed files -->
+  <ItemGroup>
+    <Content Include="..\..\samples\Jebi.Samples\Crm\**\*.*">
+      <Link>Samples\Crm\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\..\samples\Jebi.Samples\Sales\**\*.*">
+      <Link>Samples\Sales\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\..\samples\Jebi.Samples\Inventory\**\*.*">
+      <Link>Samples\Inventory\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

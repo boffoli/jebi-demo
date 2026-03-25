@@ -1,0 +1,26 @@
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="toast show position-fixed start-50 translate-middle-x mt-2"
+         style="z-index:2000;"
+         role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto text-danger">Error</strong>
+            <button type="button" class="btn-close" @onclick="()=>Message=null"></button>
+        </div>
+        <div class="toast-body">@Message</div>
+    </div>
+}
+
+@code
+{
+    private string? Message;
+
+    protected override void OnInitialized()
+        => Notifier.OnError += msg =>
+        {
+            Message = string.IsNullOrWhiteSpace(msg) ? null : msg;
+            InvokeAsync(StateHasChanged);
+        };
+}

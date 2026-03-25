@@ -1,0 +1,133 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@namespace Jebi.Web.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@inject Microsoft.Extensions.Hosting.IHostEnvironment HostEnvironment
+@inject IWebHostEnvironment WebHostEnvironment
+
+@functions {
+    private string AssetVersion(string relativePath)
+    {
+        var normalized = relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar);
+        var candidates = new[]
+        {
+            System.IO.Path.Combine(WebHostEnvironment.WebRootPath, normalized),
+            System.IO.Path.Combine(WebHostEnvironment.ContentRootPath, "wwwroot", normalized),
+            System.IO.Path.Combine(WebHostEnvironment.ContentRootPath, "..", "Jebi.Web.SharedUi", "wwwroot", normalized)
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+                return File.GetLastWriteTimeUtc(candidate).Ticks.ToString();
+        }
+
+        return "1";
+    }
+}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="~/" />
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem("jebi.theme");
+                var dark = stored === "dark";
+                document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+                document.documentElement.style.colorScheme = dark ? "dark" : "light";
+            } catch (_) {
+                document.documentElement.setAttribute("data-theme", "light");
+                document.documentElement.style.colorScheme = "light";
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="~/css/bootstrap/bootstrap.min.css?v=@AssetVersion("css/bootstrap/bootstrap.min.css")" />
+    <link href="~/css/site.css?v=@AssetVersion("css/site.css")" rel="stylesheet" />
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico?v=@AssetVersion("favicon.ico")" />
+    <link rel="shortcut icon" href="~/favicon.ico?v=@AssetVersion("favicon.ico")" />
+    <link rel="icon" type="image/png" sizes="32x32" href="~/favicon-32x32.png?v=@AssetVersion("favicon-32x32.png")" />
+    <link rel="icon" type="image/png" sizes="16x16" href="~/favicon-16x16.png?v=@AssetVersion("favicon-16x16.png")" />
+    <link rel="apple-touch-icon" href="~/apple-touch-icon.png?v=@AssetVersion("apple-touch-icon.png")" />
+    <link href="@(HostEnvironment.ApplicationName).styles.css" rel="stylesheet" />
+    <component type="typeof(HeadOutlet)" render-mode="ServerPrerendered" />
+</head>
+
+<body>
+    @RenderBody()
+
+    <div id="blazor-error-ui">
+        <environment include="Staging,Production">
+            An error has occurred. This application may no longer respond until reloaded.
+        </environment>
+        <environment include="Development">
+            An unhandled exception has occurred. See browser dev tools for details.
+        </environment>
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+    <script src="_framework/blazor.server.js"></script>
+    <script>
+        window.jebiMakeDraggable = function (containerClass) {
+            containerClass = containerClass || 'jebi-inspector-draggable';
+            var dialog = document.querySelector('.' + containerClass + ' .modal-dialog');
+            if (!dialog) return;
+            dialog.style.position = 'fixed';
+            dialog.style.margin = '0';
+            if (containerClass === 'jebi-inspector-draggable') {
+                dialog.style.top = '1rem';
+                dialog.style.left = '1rem';
+            }
+            var header = dialog.querySelector('.modal-header');
+            if (!header) return;
+            header.style.cursor = 'grab';
+            var startX, startY, startLeft, startTop;
+            header.addEventListener('mousedown', function (e) {
+                if (e.target.closest('button')) return;
+                var r = dialog.getBoundingClientRect();
+                startX = e.clientX; startY = e.clientY;
+                startLeft = r.left; startTop = r.top;
+                dialog.style.transform = 'none';
+                dialog.style.left = startLeft + 'px';
+                dialog.style.top = startTop + 'px';
+                header.style.cursor = 'grabbing';
+                function onMove(ev) {
+                    dialog.style.left = (startLeft + ev.clientX - startX) + 'px';
+                    dialog.style.top = (startTop + ev.clientY - startY) + 'px';
+                }
+                function onUp() {
+                    header.style.cursor = 'grab';
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                }
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                e.preventDefault();
+            });
+        };
+
+        window.jebiTheme = {
+            get: function () {
+                return document.documentElement.getAttribute("data-theme") === "dark";
+            },
+            set: function (isDark) {
+                var theme = isDark ? "dark" : "light";
+                document.documentElement.setAttribute("data-theme", theme);
+                document.documentElement.style.colorScheme = theme;
+                try {
+                    localStorage.setItem("jebi.theme", theme);
+                } catch (_) {
+                }
+                return isDark;
+            },
+            toggle: function () {
+                return this.set(!this.get());
+            }
+        };
+    </script>
+</body>
+
+</html>

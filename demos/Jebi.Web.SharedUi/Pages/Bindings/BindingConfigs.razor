@@ -1,0 +1,291 @@
+@* Pages/Binding/BindingConfigs.razor *@
+@page "/bindings"
+@attribute [Authorize]
+@namespace Jebi.Web.Pages.Bindings
+
+@using Jebi.Common.Features.Dtos.Model.Binding
+@using Jebi.Web.Pages.Bindings.Parts
+@inject IJebiService BindingService
+@inject Jebi.Web.Services.ErrorNotifier Notifier
+
+<PageTitle>Binding Configurations</PageTitle>
+
+<div class="jebi-page-header">
+    <div class="jebi-page-header__content">
+        <div class="jebi-page-header__eyebrow">Schema Design</div>
+        <h1 class="jebi-page-header__title">Binding Configurations</h1>
+        <p class="jebi-page-header__subtitle">
+            Link source entities to target entities, compose property rules, and validate the configuration before any ingestion run.
+        </p>
+    </div>
+
+    @if (!isLoading)
+    {
+        <div class="jebi-page-header__actions">
+            <button class="btn btn-outline-primary"
+                    @onclick="() => showCreator = true"
+                    disabled="@(isLoading || showCreator)">
+                + New Configuration
+            </button>
+        </div>
+    }
+</div>
+
+@if (isLoading)
+{
+    <p><em>Loading configurations...</em></p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-12">
+            <BindingConfigGrid
+                Configurations="configs"
+                Selected="selectedCfg"
+                SelectedChanged="OnCfgSelected"
+                InspectRequested="OpenInspectorAsync" />
+        </div>
+    </div>
+}
+
+@if (showCreator)
+{
+    <BindingConfigCreatorModal
+        OnConfigAdded="HandleConfigAdded"
+        OnCancel="() => showCreator = false" />
+}
+
+@if (showInspector && selectedCfg is not null)
+{
+    <JebiInspectorModal IsOpen="showInspector"
+                        Title="@($"Binding inspector - {selectedCfg.Name}")"
+                        ShowLeftPane="true"
+                        DialogSizeClass="jebi-inspector-dialog-binding"
+                        DialogStyle="@BindingInspectorDialogStyle"
+                        Centered="false"
+                        OnClose="CloseInspectorAsync">
+        <HeaderActions>
+            <span class="jebi-binding-state-badge @(selectedCfg.IsValid ? "jebi-binding-state-badge-ok" : "jebi-binding-state-badge-ko")"
+                  title="@IssueSummary(selectedCfg.ValidationIssues, selectedCfg.IsValid ? "Structurally valid binding configuration" : "Structurally invalid binding configuration")">
+                @(selectedCfg.IsValid ? "Valid" : "Invalid")
+            </span>
+        </HeaderActions>
+
+        <LeftContent>
+            <AddEditBindingRuleModal
+                @key="RuleEditorKey"
+                Configuration="selectedCfg"
+                IsEdit="isEditingRule"
+                RuleId="editingRuleId"
+                Revision="_ruleEditorRevision"
+                OnRuleAdded="HandleRuleAdded"
+                OnRuleEdited="HandleRuleEditedFromPanel"
+                OnModeChanged="HandleEditorModeChanged"
+                OnEditCancelled="HandleEditCancelled" />
+        </LeftContent>
+
+        <RightContent>
+            <BindingRuleGrid
+                @ref="ruleGrid"
+                ConfigurationId="selectedCfg.Id"
+                SelectedRuleId="@(isEditingRule ? editingRuleId : null)"
+                OnConfigurationChanged="HandleConfigurationChanged"
+                OnRuleDeleted="HandleRuleDeleted"
+                OnRuleEditRequested="OpenEditRulePanel"
+                OnRuleCountChanged="HandleRuleCountChanged" />
+        </RightContent>
+    </JebiInspectorModal>
+}
+
+@code {
+    /* state */
+    private List<BindingDetailDto> configs = [];
+    private BindingDetailDto? selectedCfg;
+    private BindingRuleGrid? ruleGrid;
+
+    private bool isLoading;
+    private bool showCreator;
+    private bool showInspector;
+    private bool isEditingRule;
+    private Guid? editingRuleId;
+    private int _ruleEditorRevision = 0;
+
+    private const string BindingInspectorDialogStyle =
+        "width:95vw;" +
+        "max-width:95vw;" +
+        "margin:5.55rem 0.7vw 0.35rem 4.3vw;";
+
+    private static string IssueSummary(
+        IReadOnlyCollection<BindingValidationIssueDto> issues,
+        string fallback)
+        => issues is { Count: > 0 }
+            ? string.Join(" | ", issues.Select(issue => issue.Message))
+            : fallback;
+
+    // Stable key: only changes when selected configuration changes.
+    private string RuleEditorKey => selectedCfg?.Id.ToString() ?? string.Empty;
+
+    /* init */
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            configs = await BindingService.ListBindingConfigurationsDeepAsync();
+            selectedCfg = configs.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 5_000);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    /* selection */
+    private void OnCfgSelected(BindingDetailDto? cfg)
+    {
+        selectedCfg = cfg;
+        isEditingRule = false;
+        editingRuleId = null;
+    }
+
+    private async Task OpenInspectorAsync(BindingDetailDto cfg)
+    {
+        try
+        {
+            var deep = await BindingService.GetBindingConfigurationDeepAsync(cfg.Id);
+            UpsertConfiguration(deep);
+            selectedCfg = deep;
+            showInspector = true;
+            isEditingRule = false;
+            editingRuleId = null;
+            _ruleEditorRevision++;
+        }
+        catch (Exception ex)
+        {
+            await Notifier.Error(ex, 5_000);
+        }
+    }
+
+    private Task CloseInspectorAsync()
+    {
+        showInspector = false;
+        isEditingRule = false;
+        editingRuleId = null;
+        return Task.CompletedTask;
+    }
+
+    private void OpenEditRulePanel(Guid ruleId)
+    {
+        if (selectedCfg is null) return;
+
+        isEditingRule = true;
+        editingRuleId = ruleId;
+    }
+
+    /* callback nuove configurazioni */
+    private async Task HandleConfigAdded(BindingDetailDto dto)
+    {
+        UpsertConfiguration(dto);
+        selectedCfg = dto;
+        showCreator = false;
+        showInspector = true;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    /* callback nuova rule */
+    private async Task HandleRuleAdded(PropertyBindingRuleAddResultDto result)
+    {
+        var prDto = await BindingService.GetPropertyBindingRuleAsync(result.PropertyRuleId);
+
+        if (ruleGrid is not null)
+            await ruleGrid.AddRule(prDto);
+
+        isEditingRule = false;
+        editingRuleId = null;
+    }
+
+    /* callback delete rule */
+    private Task HandleRuleDeleted(Guid ruleId)
+    {
+        if (editingRuleId == ruleId)
+        {
+            isEditingRule = false;
+            editingRuleId = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /* callback edit rule */
+    private async Task HandleRuleEditedFromPanel(PropertyBindingRuleClientDto updated)
+    {
+        if (ruleGrid is not null)
+        {
+            if (editingRuleId.HasValue && editingRuleId.Value != updated.Id)
+            {
+                await ruleGrid.ReloadAsync();
+            }
+            else
+            {
+                ruleGrid.EditRule(updated);
+            }
+        }
+
+        isEditingRule = false;
+        editingRuleId = null;
+    }
+
+    private Task HandleEditCancelled()
+    {
+        isEditingRule = false;
+        editingRuleId = null;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleEditorModeChanged(bool editMode)
+    {
+        isEditingRule = editMode;
+        if (!isEditingRule)
+            editingRuleId = null;
+        return Task.CompletedTask;
+    }
+
+    /* callback unificato di conteggio */
+    private Task HandleRuleCountChanged(int newCount)
+    {
+        if (selectedCfg is null)
+            return Task.CompletedTask;
+
+        var idx = configs.FindIndex(c => c.Id == selectedCfg.Id);
+        if (idx >= 0)
+        {
+            configs[idx].RuleCount = newCount;
+            selectedCfg.RuleCount = newCount;
+            StateHasChanged();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task HandleConfigurationChanged(BindingDetailDto updated)
+    {
+        selectedCfg = updated;
+        UpsertConfiguration(updated);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void UpsertConfiguration(BindingDetailDto configuration)
+    {
+        var idx = configs.FindIndex(c => c.Id == configuration.Id);
+        if (idx >= 0)
+            configs[idx] = configuration;
+        else
+            configs.Insert(0, configuration);
+    }
+}

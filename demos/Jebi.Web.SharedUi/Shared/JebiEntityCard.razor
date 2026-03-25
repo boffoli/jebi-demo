@@ -1,0 +1,41 @@
+@namespace Jebi.Web.Shared
+
+<section class="jebi-model-entity-card">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+        <strong class="jebi-entity-card-name">@Name</strong>
+        <span class="@BadgeClass">@BadgeLabel</span>
+    </div>
+
+    @if (HeaderExtra is not null)
+    {
+        @HeaderExtra
+    }
+
+    <div class="jebi-model-entity-details mt-2">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>@TableHeader</tr>
+                </thead>
+                <tbody>
+                    @TableBody
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (Footer is not null)
+    {
+        @Footer
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter, EditorRequired] public string BadgeClass { get; set; } = "";
+    [Parameter, EditorRequired] public string BadgeLabel { get; set; } = "";
+    [Parameter] public RenderFragment? HeaderExtra { get; set; }
+    [Parameter] public RenderFragment? TableHeader { get; set; }
+    [Parameter] public RenderFragment? TableBody { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+}

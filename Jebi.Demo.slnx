@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/demos/">
+    <Project Path="demos/Jebi.Demo/Jebi.Demo.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Jebi.Samples/Jebi.Samples.csproj" />
+  </Folder>
+</Solution>

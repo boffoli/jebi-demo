@@ -1,0 +1,61 @@
+﻿
+<div class="jebi-nav-shell">
+    <nav class="flex-column jebi-nav-groups">
+        <div class="jebi-nav-group">
+            <div class="jebi-nav-group-title">Schema Design</div>
+            <div class="nav-item px-3">
+                <NavLink href="sources" class="nav-link" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-diagram-3-fill"></span> Source Schemas
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink href="targets" class="nav-link" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-boxes"></span> Target Contexts
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink href="bindings" class="nav-link" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-link-45deg"></span> Binding Configurations
+                </NavLink>
+            </div>
+        </div>
+
+        <div class="jebi-nav-group">
+            <div class="jebi-nav-group-title">Execution</div>
+            <div class="nav-item px-3">
+                <NavLink href="ingest-json" class="nav-link" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-cloud-upload"></span> Ingestion Setups
+                </NavLink>
+            </div>
+        </div>
+
+        <AuthorizeView>
+            <Authorized>
+                <div class="jebi-nav-group jebi-nav-group-session">
+                    <div class="jebi-nav-group-title">Session</div>
+                    <div class="jebi-nav-session-user px-3">
+                        @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                    </div>
+                    <div class="nav-item px-3">
+                        <form method="get" action="/auth/logout">
+                            <button type="submit" class="nav-link btn btn-link">
+                                <span class="oi oi-account-logout" aria-hidden="true"></span>
+                                Logout
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="jebi-nav-group jebi-nav-group-session">
+                    <div class="jebi-nav-group-title">Session</div>
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="auth/login">
+                            <span class="oi oi-account-login" aria-hidden="true"></span> Login
+                        </NavLink>
+                    </div>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    </nav>
+</div>
