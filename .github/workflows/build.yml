@@ -1,4 +1,5 @@
-name: Build
+name: CI — Build & Publish Docker
+run-name: ${{ github.event_name == 'push' && 'Build .NET + Push ghcr.io/boffoli/jebi-demo:latest' || 'Build .NET (PR check)' }}
 
 "on":
   push:
