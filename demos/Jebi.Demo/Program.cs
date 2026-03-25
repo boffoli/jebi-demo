@@ -9,6 +9,7 @@ using Jebi.Web.Services;
 
 // 1) Bootstrap host and file-system prerequisites.
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseStaticWebAssets();
 var logDirectory = Path.Combine(builder.Environment.ContentRootPath, "Logs");
 Directory.CreateDirectory(logDirectory);
 
@@ -103,6 +104,7 @@ app.UseAuthorization();
 
 // 12) Map endpoints for Blazor host and demo auth flows.
 app.MapBlazorHub();
+app.MapStaticAssets();
 app.MapDemoAuthEndpoints();
 app.MapFallbackToPage("/_Host");
 

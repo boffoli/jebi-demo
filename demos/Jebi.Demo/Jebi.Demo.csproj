@@ -7,6 +7,7 @@
     <RootNamespace>Jebi.Web</RootNamespace>
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
     <UserSecretsId>Jebi-Demo-LocalSecrets</UserSecretsId>
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
