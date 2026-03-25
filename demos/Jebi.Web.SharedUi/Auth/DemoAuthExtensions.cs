@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Jebi.Web.Auth;
 
-internal static class DemoAuthExtensions
+public static class DemoAuthExtensions
 {
     public static IServiceCollection AddDemoAuth(this IServiceCollection services, IConfiguration config)
     {

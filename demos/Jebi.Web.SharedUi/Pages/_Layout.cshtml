@@ -1,4 +1,5 @@
 ﻿@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Hosting
 @namespace Jebi.Web.Pages
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 @inject Microsoft.Extensions.Hosting.IHostEnvironment HostEnvironment
@@ -7,20 +8,9 @@
 @functions {
     private string AssetVersion(string relativePath)
     {
-        var normalized = relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar);
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(WebHostEnvironment.WebRootPath, normalized),
-            System.IO.Path.Combine(WebHostEnvironment.ContentRootPath, "wwwroot", normalized),
-            System.IO.Path.Combine(WebHostEnvironment.ContentRootPath, "..", "Jebi.Web.SharedUi", "wwwroot", normalized)
-        };
-
-        foreach (var candidate in candidates)
-        {
-            if (File.Exists(candidate))
-                return File.GetLastWriteTimeUtc(candidate).Ticks.ToString();
-        }
-
+        var info = WebHostEnvironment.WebRootFileProvider.GetFileInfo(relativePath);
+        if (info.Exists && info.LastModified != DateTimeOffset.MinValue)
+            return info.LastModified.Ticks.ToString();
         return "1";
     }
 }
@@ -45,13 +35,13 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="~/css/bootstrap/bootstrap.min.css?v=@AssetVersion("css/bootstrap/bootstrap.min.css")" />
-    <link href="~/css/site.css?v=@AssetVersion("css/site.css")" rel="stylesheet" />
-    <link rel="icon" type="image/x-icon" href="~/favicon.ico?v=@AssetVersion("favicon.ico")" />
-    <link rel="shortcut icon" href="~/favicon.ico?v=@AssetVersion("favicon.ico")" />
-    <link rel="icon" type="image/png" sizes="32x32" href="~/favicon-32x32.png?v=@AssetVersion("favicon-32x32.png")" />
-    <link rel="icon" type="image/png" sizes="16x16" href="~/favicon-16x16.png?v=@AssetVersion("favicon-16x16.png")" />
-    <link rel="apple-touch-icon" href="~/apple-touch-icon.png?v=@AssetVersion("apple-touch-icon.png")" />
+    <link rel="stylesheet" href="/_content/Jebi.Web.SharedUi/css/bootstrap/bootstrap.min.css?v=@AssetVersion("_content/Jebi.Web.SharedUi/css/bootstrap/bootstrap.min.css")" />
+    <link href="/_content/Jebi.Web.SharedUi/css/site.css?v=@AssetVersion("_content/Jebi.Web.SharedUi/css/site.css")" rel="stylesheet" />
+    <link rel="icon" type="image/x-icon" href="/_content/Jebi.Web.SharedUi/favicon.ico?v=@AssetVersion("_content/Jebi.Web.SharedUi/favicon.ico")" />
+    <link rel="shortcut icon" href="/_content/Jebi.Web.SharedUi/favicon.ico?v=@AssetVersion("_content/Jebi.Web.SharedUi/favicon.ico")" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/_content/Jebi.Web.SharedUi/favicon-32x32.png?v=@AssetVersion("_content/Jebi.Web.SharedUi/favicon-32x32.png")" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/_content/Jebi.Web.SharedUi/favicon-16x16.png?v=@AssetVersion("_content/Jebi.Web.SharedUi/favicon-16x16.png")" />
+    <link rel="apple-touch-icon" href="/_content/Jebi.Web.SharedUi/apple-touch-icon.png?v=@AssetVersion("_content/Jebi.Web.SharedUi/apple-touch-icon.png")" />
     <link href="@(HostEnvironment.ApplicationName).styles.css" rel="stylesheet" />
     <component type="typeof(HeadOutlet)" render-mode="ServerPrerendered" />
 </head>

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using Jebi.Common.Auth;
 using Jebi.Samples.Crm;
 using Jebi.Samples.Inventory;
@@ -97,15 +96,6 @@ if (!app.Environment.IsDevelopment())
 // 11) Configure HTTP middleware pipeline.
 app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
-var sharedUiWwwroot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "Jebi.Web.SharedUi", "wwwroot"));
-if (Directory.Exists(sharedUiWwwroot))
-{
-    // Serve shared static assets from Jebi.Web.SharedUi when available.
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(sharedUiWwwroot)
-    });
-}
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();

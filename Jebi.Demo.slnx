@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/demos/">
     <Project Path="demos/Jebi.Demo/Jebi.Demo.csproj" />
+    <Project Path="demos/Jebi.Web.SharedUi/Jebi.Web.SharedUi.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Jebi.Samples/Jebi.Samples.csproj" />

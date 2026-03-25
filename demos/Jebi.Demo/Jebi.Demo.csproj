@@ -19,21 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\samples\Jebi.Samples\Jebi.Samples.csproj" />
-  </ItemGroup>
-
-  <!-- Shared Blazor UI (razor components, pages, wwwroot) -->
-  <ItemGroup>
-    <Compile Include="..\Jebi.Web.SharedUi\Auth\**\*.cs" Link="Auth\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\Jebi.Web.SharedUi\Services\ErrorNotifier.cs" Link="Services\ErrorNotifier.cs" />
-    <Compile Include="..\Jebi.Web.SharedUi\Pages\**\*.cs" Link="Pages\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\Jebi.Web.SharedUi\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
-    <RazorComponent Include="..\Jebi.Web.SharedUi\App.razor" Link="App.razor" />
-    <RazorComponent Include="..\Jebi.Web.SharedUi\Pages\**\*.razor" Link="Pages\%(RecursiveDir)%(Filename)%(Extension)" />
-    <RazorComponent Include="..\Jebi.Web.SharedUi\Shared\**\*.razor" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Content Include="..\Jebi.Web.SharedUi\_Imports.razor" Link="_Imports.razor" />
-    <Content Include="..\Jebi.Web.SharedUi\Pages\**\*.cshtml" Link="Pages\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Content Include="..\Jebi.Web.SharedUi\Shared\**\*.razor.css" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Content Include="..\Jebi.Web.SharedUi\wwwroot\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+    <ProjectReference Include="..\Jebi.Web.SharedUi\Jebi.Web.SharedUi.csproj" />
   </ItemGroup>
 
   <!-- Sample SQLite seed files -->
